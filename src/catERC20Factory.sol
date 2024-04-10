@@ -1,15 +1,15 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 pragma solidity >=0.8.4 <0.9.0;
 
 import { IXERC20Factory } from './interfaces/IXERC20Factory.sol';
 
-import { catERC20 } from './catERC20.sol';
-import { catLockbox } from './catLockbox.sol';
+import { CatERC20 } from './CatERC20.sol';
+import { CatLockbox } from './CatLockbox.sol';
 
-contract catERC20Factory is IXERC20Factory {
+contract CatERC20Factory is IXERC20Factory {
 
   /**
-   * @notice Deploys an catERC20 contract using CREATE2
+   * @notice Deploys an CatERC20 contract using CREATE2
    * @dev limits and minters must be the same length
    * @param name The name of the token
    * @param symbol The symbol of the token
@@ -25,7 +25,7 @@ contract catERC20Factory is IXERC20Factory {
     address[] calldata bridges
   ) external returns (address caterc20) {
     caterc20 = _deployXERC20(name, symbol, minterLimits, bridges);
-    catERC20(caterc20).transferOwnership(msg.sender);
+    CatERC20(caterc20).transferOwnership(msg.sender);
 
     emit XERC20Deployed(caterc20);
   }
@@ -70,11 +70,11 @@ contract catERC20Factory is IXERC20Factory {
 
     lockbox = _deployLockbox(caterc20, baseToken, isNative);
 
-    catERC20(caterc20).setLockbox(lockbox);
+    CatERC20(caterc20).setLockbox(lockbox);
 
     emit LockboxDeployed(lockbox);
 
-    catERC20(caterc20).transferOwnership(msg.sender);
+    CatERC20(caterc20).transferOwnership(msg.sender);
   }
 
   /**
@@ -98,10 +98,10 @@ contract catERC20Factory is IXERC20Factory {
     }
     bytes32 salt = keccak256(abi.encodePacked(name, symbol, msg.sender));
 
-    caterc20 = address(new catERC20{salt: salt}(name, symbol));
+    caterc20 = address(new CatERC20{salt: salt}(name, symbol));
 
     for (uint256 i; i < _bridgesLength; ++i) {
-      catERC20(caterc20).setLimits(bridges[i], minterLimits[i], 0);
+      CatERC20(caterc20).setLimits(bridges[i], minterLimits[i], 0);
     }
   }
 
@@ -109,8 +109,10 @@ contract catERC20Factory is IXERC20Factory {
    * @notice Deploys an XERC20Lockbox contract using CREATE3
    *
    * @dev When deploying a lockbox for the gas token of the chain, then, the base token needs to be address(0)
-   * Does not set the lockbox on the catERC20 token, only deploying the 
+   * Does not set the lockbox on the CatERC20 token, only deploying the 
    * lockbox itself.
+   * msg.sender is not included in the lockbox salt. This is not needed
+   * since a lockbox is a non-ownable contract and is pure logic.
    * @param caterc20 The address of the caterc20 that you want to deploy a lockbox for
    * @param baseToken The address of the base token that you want to lock
    * @param isNative Whether or not the base token is the native (gas) token of the chain. Eg: MATIC for polygon chain
@@ -121,9 +123,9 @@ contract catERC20Factory is IXERC20Factory {
     address baseToken,
     bool isNative
   ) internal returns (address payable lockbox) {
-    bytes32 salt = keccak256(abi.encodePacked(caterc20, baseToken, msg.sender));
+    bytes32 salt = keccak256(abi.encodePacked(caterc20, baseToken, isNative)); // We technically don't have to include isNative in the salt since the baseToken does that. But for simplicity we do it anyway.
 
-    lockbox = payable(new catLockbox{salt: salt}(caterc20, baseToken, isNative));
+    lockbox = payable(new CatLockbox{salt: salt}(caterc20, baseToken, isNative));
 
     return lockbox;
   }

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 pragma solidity >=0.8.4 <0.9.0;
 
 import { IXERC20 } from './interfaces/IXERC20.sol';
@@ -6,11 +6,11 @@ import { IXERC20Lockbox } from './interfaces/IXERC20Lockbox.sol';
 
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 
-contract catLockbox is IXERC20Lockbox {
+contract CatLockbox is IXERC20Lockbox {
 
-    error NotNative();
-    error IsNative();
-    error WithdrawFailed();
+  error NotNative();
+  error IsNative();
+  error WithdrawFailed();
 
   /**
    * @notice The XERC20 token of this contract
@@ -25,13 +25,12 @@ contract catLockbox is IXERC20Lockbox {
   /**
    * @notice Whether the ERC20 token is the native gas token of this chain
    */
-
   bool public immutable IS_NATIVE;
 
   /**
    * @notice Constructor
    *
-   * @param xerc20 The address of the catERC20 contract
+   * @param xerc20 The address of the CatERC20 contract
    * @param erc20 The address of the ERC20 contract
    * @param isNative Whether the ERC20 token is the native gas token of this chain or not
    */
@@ -63,9 +62,9 @@ contract catLockbox is IXERC20Lockbox {
   }
 
   /**
-   * @notice Deposit ERC20 tokens into the lockbox, and send the catERC20 to a user
+   * @notice Deposit ERC20 tokens into the lockbox, and send the CatERC20 to a user
    *
-   * @param to The user to send the catERC20 to
+   * @param to The user to send the CatERC20 to
    * @param amount The amount of tokens to deposit
    */
 
@@ -76,9 +75,9 @@ contract catLockbox is IXERC20Lockbox {
   }
 
   /**
-   * @notice Deposit the native asset into the lockbox, and send the catERC20 to a user
+   * @notice Deposit the native asset into the lockbox, and send the CatERC20 to a user
    *
-   * @param to The user to send the catERC20 to
+   * @param to The user to send the CatERC20 to
    */
   function depositNativeTo(address to) public payable {
     if (!IS_NATIVE) revert NotNative();

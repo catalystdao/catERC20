@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.13;
 
 import { IXERC20 } from "./interfaces/IXERC20.sol";
@@ -19,7 +19,7 @@ struct Bridge {
  * Inspired by https://github.com/defi-wonderland/xERC20
  * @dev For optimisations purposes, the bridge limits can't be larger than uint104.
  */
-contract catERC20 is ERC20, Ownable, IXERC20 {
+contract CatERC20 is ERC20, Ownable, IXERC20 {
 
   error AmountTooHigh();
   error LockboxAlreadySet();
@@ -48,6 +48,7 @@ contract catERC20 is ERC20, Ownable, IXERC20 {
   constructor(string memory name_, string memory symbol_) {
       NAME = name_;
       SYMBOL = symbol_;
+      _initializeOwner(msg.sender);
 
       CONSTANT_NAME_HASH = keccak256(bytes(name_));
   }
@@ -110,6 +111,19 @@ contract catERC20 is ERC20, Ownable, IXERC20 {
   }
 
   /**
+   * @notice Lets the owner mint tokens.
+   * This function exists to make it easier for owners to mint tokens.
+   * The XERC20 standard is a "mintable token", since the owner
+   * can register themselves as a bridge and mint tokens that way.
+   * @dev Can only be called by owner
+   * @param user The address of the user who needs tokens minted
+   * @param amount The amount of tokens being minted
+   */
+  function ownableMint(address user, uint256 amount) external onlyOwner {
+    _mint(user, amount);
+  }
+
+  /**
    * @notice Burns tokens for a user
    * @dev Can only be called by a minter
    * @param user The address of the user who needs tokens burned
@@ -119,7 +133,7 @@ contract catERC20 is ERC20, Ownable, IXERC20 {
     require(amount < uint256(type(int256).max));
     if (user != msg.sender) _spendAllowance(user, msg.sender, amount);
 
-    _useBridgeLimits(user, -int256(amount));
+    _useBridgeLimits(msg.sender, -int256(amount));
     _burn(user, amount);
   }
 
