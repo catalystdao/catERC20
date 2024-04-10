@@ -2,12 +2,15 @@
 pragma solidity ^0.8.13;
 
 import {Test, console2} from "forge-std/Test.sol";
-import { Cat } from "../src/Cat.sol";
+import { catERC20 } from "../src/catERC20.sol";
 
 contract CatTest is Test {
-    Cat public catToken;
+    catERC20 public catToken;
+
+    string constant NAME = "hello";
+    string constant SYMBOL = "hello";
 
     function setUp() public {
-        catToken = new Cat();
+        catToken = new catERC20("hello", "hello");
     }
 }
