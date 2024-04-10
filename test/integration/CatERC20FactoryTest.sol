@@ -48,6 +48,31 @@ contract CatERC20FactoryTest is Test {
         CATERC20FACTORY.deployXERC20(name, symbol, minterLimits, burnerLimits, bridges);
     }
 
+    /** Also contains a revert test.  */
+    function test_set_minting_limits_on_create(string calldata name, string calldata symbol, uint104[] calldata minterLimits_, address[] calldata bridges) external {
+
+        uint256[] memory minterLimits = new uint256[](minterLimits_.length);
+        for (uint256 i = 0; i < minterLimits_.length; ++i) {
+            minterLimits[i] = minterLimits_[i];
+        }
+        uint256[] memory burnerLimits = minterLimits;
+
+        if (minterLimits.length != bridges.length) {
+            vm.expectRevert(abi.encodeWithSignature("IXERC20Factory_InvalidLength()"));
+            CATERC20FACTORY.deployXERC20(name, symbol, minterLimits, burnerLimits, bridges);
+            return;
+        }
+        uint256 snapshotId = vm.snapshot();
+        address deploymentAddress = CATERC20FACTORY.deployXERC20(name, symbol, minterLimits, burnerLimits, bridges);
+
+        vm.revertTo(snapshotId);
+
+        for (uint256 i = 0; i < minterLimits_.length; ++i) {
+            vm.expectCall(deploymentAddress, abi.encodeWithSignature("setLimits(address,uint256,uint256)", bridges[i], minterLimits[i], 0));
+        }
+        CATERC20FACTORY.deployXERC20(name, symbol, minterLimits, burnerLimits, bridges);
+    }
+
     //TODO: Check events.
 
     //--- Deploy Lockbox ---//
@@ -65,7 +90,6 @@ contract CatERC20FactoryTest is Test {
     }
 
     // TODO: Check events.
-    // TODO: isnative
     /** @dev Tokens are deployed with create2, with salt as caterc20 and baseToken. As a result, you can't do deployments of same parameters twice. */
     function test_revert_deploy_twice_same_parameters(address caterc20, address baseToken) external {
         bool isNative = baseToken == address(0);
@@ -77,6 +101,17 @@ contract CatERC20FactoryTest is Test {
         // If we use another sender, then we still get the same address and it reverts.
         vm.prank(address(200));
         vm.expectRevert();
+        CATERC20FACTORY.deployLockbox(caterc20, baseToken, isNative);
+    }
+
+    function test_revert_compare_base_token_and_is_native(address caterc20, address baseToken, bool isNative) external {
+        if (isNative && baseToken == address(0)) {
+            // Works
+        } else if (!isNative && baseToken != address(0)) {
+            // Works
+        } else {
+            vm.expectRevert(abi.encodeWithSignature("IXERC20Factory_BadTokenAddress()"));
+        }
         CATERC20FACTORY.deployLockbox(caterc20, baseToken, isNative);
     }
 
@@ -105,5 +140,19 @@ contract CatERC20FactoryTest is Test {
 
         // 2. Check that the basetoken is set.
         assertEq(address(CatLockbox(lockbox).ERC20()), baseToken, "erc20 not correctly set");
+    }
+
+    function test_revert_compare_base_token_and_is_native(string calldata name, string calldata symbol, address baseToken, bool isNative) external {
+        uint256[] memory minterLimits = new uint256[](0);
+        address[] memory bridges = new address[](0);
+
+        if (isNative && baseToken == address(0)) {
+            // Works
+        } else if (!isNative && baseToken != address(0)) {
+            // Works
+        } else {
+            vm.expectRevert(abi.encodeWithSignature("IXERC20Factory_BadTokenAddress()"));
+        }
+        CATERC20FACTORY.deployXERC20WithLockbox(name, symbol, minterLimits, bridges, baseToken, isNative);
     }
 }
