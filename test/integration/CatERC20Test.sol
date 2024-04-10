@@ -89,7 +89,7 @@ contract CatERC20Test is Test {
         CATERC20.mint(to, amount);
     }
 
-    //--- Bridge Limits ---//
+    //--- Bridge Limits Modifications ---//
 
     function test_set_limit(address bridge, uint104 mintingLimit, uint32 time) external {
         vm.warp(time);
@@ -101,10 +101,14 @@ contract CatERC20Test is Test {
         // Check:
         // 1. Check lastTouched
         assertEq(lastTouched, time, "Time not correctly set");
-        // 1. Check maxLimit
+        // 2. Check maxLimit
         assertEq(maxLimit, mintingLimit, "Time not correctly set");
-        // 1. Check currentLimit
+        // 3. Check currentLimit
         assertEq(currentLimit, 0, "Time not correctly set");
+        // 4. mintingMaxLimitOf
+        assertEq(CATERC20.mintingMaxLimitOf(bridge), maxLimit, "view function mintingMaxLimitOf");
+        // 5. burningMaxLimitOf
+        assertEq(CATERC20.burningMaxLimitOf(bridge), type(uint256).max, "view function burningMaxLimitOf");
     }
 
     function test_set_limit_event(address bridge, uint104 mintingLimit) external {
@@ -124,5 +128,72 @@ contract CatERC20Test is Test {
         vm.prank(caller);
         vm.expectRevert(abi.encodeWithSignature("Unauthorized()"));
         CATERC20.setLimits(bridge, mintingLimit, 0);
+    }
+
+    //--- Minting & Burning ---//
+
+    function test_mint_with_limit(address target, uint104 amount, uint104 mintingLimit, address bridge) external {
+        // First set a limit for the brige:
+        CATERC20.setLimits(bridge, mintingLimit, 0);
+
+        vm.prank(bridge);
+        if (amount <= mintingLimit) {
+            CATERC20.mint(target, amount);
+            assertEq(CATERC20.balanceOf(target), amount, "Not correctly minted");
+        } else {
+            vm.expectRevert(abi.encodeWithSignature("IXERC20_NotHighEnoughLimits()"));
+            CATERC20.mint(target, amount);
+        }
+    }
+
+    function test_ownable_mint(address target, uint256 amount) external {
+        CATERC20.ownableMint(target, amount);
+        assertEq(CATERC20.balanceOf(target), amount, "Not correctly minted");
+    }
+    
+    function test_revert_ownable_mint_only_owner(address target, uint256 amount, address caller) external {
+        vm.assume(caller != address(this));
+        vm.assume(caller != address(0));
+
+        vm.prank(caller);
+        vm.expectRevert(abi.encodeWithSignature("Unauthorized()"));
+        CATERC20.ownableMint(target, amount);
+    }
+
+    function test_burn_by_user(address user, uint248 amount) external {
+        vm.assume(user != address(0));
+        // Give the user some tokens.
+        CATERC20.ownableMint(user, amount);
+        
+        // Let the user burn their tokens.
+        vm.prank(user);
+        CATERC20.burn(user, amount);
+    }
+
+    function test_revert_burn_from_user(address user, uint248 amount, address burner) external {
+        vm.assume(burner != user);
+        vm.assume(burner != address(0) && user != address(0));
+        // Give the user some tokens.
+        CATERC20.ownableMint(user, amount);
+
+        vm.prank(user);
+        CATERC20.approve(burner, amount);
+
+        vm.prank(burner);
+        CATERC20.burn(user, amount);
+    }
+
+    function test_revert_burn_from_user_no_allowance(address user, uint248 amount, address burner) external {
+        vm.assume(burner != user);
+        vm.assume(burner != address(0) && user != address(0));
+        // Give the user some tokens.
+        CATERC20.ownableMint(user, amount);
+
+        vm.prank(user);
+        CATERC20.approve(burner, amount);
+
+        vm.prank(burner);
+        vm.expectRevert(abi.encodeWithSignature("InsufficientAllowance()"));
+        CATERC20.burn(user, uint256(amount) + 1);
     }
 }
