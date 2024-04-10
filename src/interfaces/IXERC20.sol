@@ -34,21 +34,6 @@ interface IXERC20 {
   error IXERC20_LimitsTooHigh();
 
   /**
-   * @notice Contains the mint or burn parameters for a bridge
-   *
-   * @param timestamp The timestamp of the last mint/burn
-   * @param ratePerSecond The rate per second of the bridge
-   * @param maxLimit The max limit of the bridge
-   * @param currentLimit The current limit of the bridge
-   */
-  struct BridgeParameters {
-    uint256 timestamp;
-    uint256 ratePerSecond;
-    uint256 maxLimit;
-    uint256 currentLimit;
-  }
-
-  /**
    * @notice Sets the lockbox address
    *
    * @param lockbox The address of the lockbox

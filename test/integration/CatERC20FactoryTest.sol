@@ -34,7 +34,7 @@ contract CatERC20FactoryTest is Test {
     }
 
     /** @dev Tokens are deployed with create2, with salt as sender, name and symbol. As a result, you can't do deployments of same parameters twice. */
-    function test_deploy_twice_same_parameters(string calldata name, string calldata symbol) external {
+    function test_revert_deploy_twice_same_parameters(string calldata name, string calldata symbol) external {
         uint256[] memory minterLimits = new uint256[](0);
         uint256[] memory burnerLimits = new uint256[](0);
         address[] memory bridges = new address[](0);
@@ -67,7 +67,7 @@ contract CatERC20FactoryTest is Test {
     // TODO: Check events.
     // TODO: isnative
     /** @dev Tokens are deployed with create2, with salt as caterc20 and baseToken. As a result, you can't do deployments of same parameters twice. */
-    function test_deploy_twice_same_parameters(address caterc20, address baseToken) external {
+    function test_revert_deploy_twice_same_parameters(address caterc20, address baseToken) external {
         bool isNative = baseToken == address(0);
         CATERC20FACTORY.deployLockbox(caterc20, baseToken, isNative);
 

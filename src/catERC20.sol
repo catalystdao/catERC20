@@ -43,14 +43,20 @@ contract CatERC20 is ERC20, Ownable, IXERC20 {
    */
   mapping(address bridgeAddress => Bridge bridgeContext) public bridges;
 
-  bytes32 immutable CONSTANT_NAME_HASH;
-
   constructor(string memory name_, string memory symbol_) {
       NAME = name_;
       SYMBOL = symbol_;
       _initializeOwner(msg.sender);
 
       CONSTANT_NAME_HASH = keccak256(bytes(name_));
+  }
+
+  bytes32 immutable CONSTANT_NAME_HASH;
+
+  /// @dev For more performance, override to return the constant value
+  /// of `keccak256(bytes(name()))` if `name()` will never change.
+  function _constantNameHash() internal view override returns (bytes32 result) {
+    return result = CONSTANT_NAME_HASH;
   }
 
   /// @dev Returns the name of the token.
@@ -63,11 +69,7 @@ contract CatERC20 is ERC20, Ownable, IXERC20 {
       return SYMBOL;
   }
 
-  /// @dev For more performance, override to return the constant value
-  /// of `keccak256(bytes(name()))` if `name()` will never change.
-  function _constantNameHash() internal view override returns (bytes32 result) {
-    return result = CONSTANT_NAME_HASH;
-  }
+  //--- Admin Set Functions ---//
 
   /**
    * @notice Sets the lockbox address
@@ -183,7 +185,6 @@ contract CatERC20 is ERC20, Ownable, IXERC20 {
   function burningCurrentLimitOf(address /* bridge */) public pure returns (uint256 limit) {
     return limit = type(uint256).max;
   }
-
 
   //--- Change Bridge Limits ---//
 
