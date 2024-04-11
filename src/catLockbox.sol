@@ -8,6 +8,7 @@ import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 
 contract CatLockbox is IXERC20Lockbox {
 
+  error BadTokenAddress();
   error NotNative();
   error IsNative();
   error WithdrawFailed();
@@ -31,12 +32,15 @@ contract CatLockbox is IXERC20Lockbox {
    * @notice Constructor
    *
    * @param xerc20 The address of the CatERC20 contract
-   * @param erc20 The address of the ERC20 contract
+   * @param baseToken The address of the ERC20 contract
    * @param isNative Whether the ERC20 token is the native gas token of this chain or not
    */
-  constructor(address xerc20, address erc20, bool isNative) {
+  constructor(address xerc20, address baseToken, bool isNative) {
+    if ((baseToken == address(0) && !isNative) || (isNative && baseToken != address(0))) {
+      revert BadTokenAddress();
+    }
     XERC20 = IXERC20(xerc20);
-    ERC20 = erc20;
+    ERC20 = baseToken;
     IS_NATIVE = isNative;
   }
 
@@ -113,7 +117,6 @@ contract CatLockbox is IXERC20Lockbox {
    * @param amount The amount of tokens to withdraw
    */
   function _withdraw(address to, uint256 amount) internal {
-
     XERC20.burn(msg.sender, amount);
 
     if (IS_NATIVE) {

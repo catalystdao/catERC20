@@ -5,6 +5,8 @@ import { ERC20 } from "solady/tokens/ERC20.sol";
 
 contract MockERC20 is ERC20 {
 
+  function test() external {}
+
   string NAME;
   string SYMBOL;
   
@@ -33,5 +35,9 @@ contract MockERC20 is ERC20 {
   /// @dev Returns the symbol of the token.
   function symbol() public view override returns (string memory) {
       return SYMBOL;
+  }
+
+  function mint(address to, uint256 amount) public {
+    _mint(to, amount);
   }
 }
