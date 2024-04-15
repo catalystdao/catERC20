@@ -196,4 +196,13 @@ contract CatERC20Test is Test {
         vm.expectRevert(abi.encodeWithSignature("InsufficientAllowance()"));
         CATERC20.burn(user, uint256(amount) + 1);
     }
+
+    function test_revert_burn_lots(address burner) external {
+        uint256 amount = uint256(type(int256).max) + 1;
+        CATERC20.ownableMint(burner, amount);
+
+        vm.prank(burner);
+        vm.expectRevert();
+        CATERC20.burn(burner, amount);
+    }
 }

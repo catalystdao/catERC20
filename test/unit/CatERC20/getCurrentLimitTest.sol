@@ -139,4 +139,28 @@ contract CatERC20UnitTest is Test {
             "delta limit not working with decay"
         );
     }
+
+    function test_revert_not_high_enough_limits(uint96 maxLimit, uint96 deltaLimit, uint96 currentLimit, uint40 lastTouched, uint40 extraTime) external {
+        vm.assume(deltaLimit != 0);
+        vm.assume(maxLimit != type(uint104).max);
+
+        uint256 referenceCurrentLimit = currentLimit;
+        if (extraTime >= DURATION) {
+            referenceCurrentLimit = 0;
+        } else {
+            uint256 reduction = uint256(maxLimit) * uint256(extraTime) / DURATION;
+            referenceCurrentLimit = referenceCurrentLimit > reduction ? referenceCurrentLimit - reduction : 0;
+        }
+
+        if (deltaLimit + referenceCurrentLimit <= maxLimit) return;
+
+        vm.expectRevert(abi.encodeWithSignature("IXERC20_NotHighEnoughLimits()"));
+        GCL.getCurrentLimit(
+            maxLimit,
+            currentLimit,
+            uint256(lastTouched),
+            uint256(lastTouched) + uint256(extraTime),
+            int104(uint104(deltaLimit))
+        );
+    }
 }
