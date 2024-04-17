@@ -251,7 +251,7 @@ contract CatERC20 is ERC20, Ownable, IXERC20 {
     uint256 lastTouched,
     uint256 currentTime,
     int256 deltaLimit
-  ) internal pure returns (uint256 newLimit) {
+  ) internal pure returns (uint256 newCurrentLimit) {
     // Check if maxLimit is a magic number.
     if (maxLimit == type(uint104).max) return 0;
     // Check that extraDifference < maxLimit.
@@ -269,17 +269,17 @@ contract CatERC20 is ERC20, Ownable, IXERC20 {
     // Lets compute the decay.
     uint256 decay = maxLimit * deltaTime / DURATION;
     
-    newLimit = currentLimit > decay ? currentLimit - decay : 0;
+    newCurrentLimit = currentLimit > decay ? currentLimit - decay : 0;
 
     // If deltaLimit < 0, then we don't have to check if it matches the limit.
     // Likewise when deltaLimit = 0.
-    if (deltaLimit <= 0) return newLimit > uint256(-deltaLimit) ? newLimit - uint256(-deltaLimit) : 0;
+    if (deltaLimit <= 0) return newCurrentLimit > uint256(-deltaLimit) ? newCurrentLimit - uint256(-deltaLimit) : 0;
 
     unchecked {
-      // deltaLimit is bounded by maxLimit. newLimit is bounded by type(uint104).max. Each of which is bounded by type(uint256).max / 2.
-      if (maxLimit < uint256(deltaLimit) + newLimit) revert IXERC20_NotHighEnoughLimits();
-      // Same bounded argument: newLimit + deltaLimit < type(104).max + maxLimit < type(104).max * 2.
-      return uint256(int256(newLimit) + deltaLimit);
+      // deltaLimit is bounded by maxLimit. newCurrentLimit is bounded by type(uint104).max. Each of which is bounded by type(uint256).max / 2.
+      if (maxLimit < uint256(deltaLimit) + newCurrentLimit) revert IXERC20_NotHighEnoughLimits();
+      // Same bounded argument: newCurrentLimit + deltaLimit < type(104).max + maxLimit < type(104).max * 2.
+      return uint256(int256(newCurrentLimit) + deltaLimit);
     }
   }
 }
