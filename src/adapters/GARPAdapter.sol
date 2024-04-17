@@ -44,10 +44,24 @@ contract GARPAdapter is ICrossChainReceiver, IMessageEscrowStructs, Bytes65 {
 
   function receiveAck(bytes32 destinationIdentifier, bytes32 messageIdentifier, bytes calldata acknowledgement) onlyGARP external {
     // Check if escrow was specified.
-    // TODO: implement
+    bytes1 status = acknowledgement[0];
+
+    // decode packet.
+    address token = address(uint160(uint256(bytes32(acknowledgement[TOKEN_IDENTIFIER_START + 1 : TOKEN_IDENTIFIER_END + 1]))));
+    uint256 amount = uint256(bytes32(acknowledgement[AMOUNT_START + 1 : AMOUNT_END + 1]));
+    bytes32 escrowContext = bytes32(acknowledgement[ESCROW_SCRATCHPAD_START + 1 : ESCROW_SCRATCHPAD_END + 1]);
+    
+    // Check if the call was successful
+    if (status == 0x00) {
+      _deleteEscrow(token, amount, escrowContext);
+    } else {
+      // status > 0x00, swap failed.
+      _releaseEscrow(token, amount, escrowContext);
+    }
+
+    // TODO: Emit event.
   }
 
-  // Remember to add your onlyEscrow modifier.
   /**
    * @notice Called when we receive messages from GARP 
    * 
@@ -89,9 +103,14 @@ contract GARPAdapter is ICrossChainReceiver, IMessageEscrowStructs, Bytes65 {
     uint256 amount = uint256(bytes32(message[AMOUNT_START : AMOUNT_END]));
     address to = address(bytes20(message[TO_ACCOUNT_START_EVM : TO_ACCOUNT_END]));
 
-
     // Try to mint tokens.
-    bool mintSuccess = _mint( token, to, amount);
+    bool mintSuccess;
+    try IXERC20(token).mint(to, amount) {
+      mintSuccess = true;
+    } catch (bytes memory /* err */) {
+      mintSuccess = false;
+    }
+
     if (!mintSuccess) {
       if (uint8(escrowFlags) != 0) {
         // TODO: hardrevert back
@@ -121,21 +140,15 @@ contract GARPAdapter is ICrossChainReceiver, IMessageEscrowStructs, Bytes65 {
       }
     }
 
-    // Return the message back with a success statement.
-    return bytes.concat(
+    // Set the acknowledgement for return.
+    acknowledgement = bytes.concat(
       bytes1(0x00),
       message
     );
-  }
 
-  function _mint(address token, address to, uint256 amount) internal returns(bool success) {
-    try IXERC20(token).mint(to, amount) {
-      return true;
-    } catch (bytes memory /* err */) {
-      return false;
-    }
+    // TODO: emit event.
   }
-
+  
   /**
    * @notice Send tokens to a destination chain
    * @param escrowFlags Flags for how to handle the escrow:
@@ -154,15 +167,12 @@ contract GARPAdapter is ICrossChainReceiver, IMessageEscrowStructs, Bytes65 {
     IncentiveDescription calldata incentive,
     uint64 deadline
   ) external payable returns(uint256 gasRefund, bytes32 messageIdentifier) {
-    // Check if the user specified to escrow or to burn (and then mint on destination).
-    // We will always collect all tokens from the user, even if they specified no escrow.
-    SafeTransferLib.safeTransferFrom(token, msg.sender, address(this), amount);
-    // That is because we can't gurantee that the tx on the dest. side will execute.
-    // As a result, we will have to escrow it regardless.
-    // TODO: set escrow.
+    // Collect tokens from user and write escrow.
+    // Token collection is done together with the escrow, to ensure escrow actions are complete.
     bytes32 escrowContext = _writeEscrow(token, amount, refundTo);
+    // _writeEscrow makes an external call. There should be no storage modifications beyond this call.
 
-    // Create the message. // TODO: message format
+    // Create the message.
     bytes memory message = bytes.concat(
       escrowFlags,
       bytes32(amount),
@@ -180,6 +190,8 @@ contract GARPAdapter is ICrossChainReceiver, IMessageEscrowStructs, Bytes65 {
       incentive,
       deadline
     );
+
+    // TODO: emit event.
   }
 
   //--- Escrow Helpers ---//
@@ -200,6 +212,11 @@ contract GARPAdapter is ICrossChainReceiver, IMessageEscrowStructs, Bytes65 {
     blockNumber = uint40(uint256(blockNumber)); // select the blockNumber from the rightmost 5 bytes. 
   }
 
+  /**
+   * @notice Computes an escrow hash. Importantly, this hash ensures that fradulent AMBs can only
+   * touch escrows with correct context: Escrows with wrong amounts and/or refundTo cannot be released.
+   * 
+   */
   function _escrowHash(address token, uint256 amount, address refundTo, uint40 blockNumber) internal pure returns(bytes32) {
     return keccak256(bytes.concat(
       bytes20(uint160(token)),
@@ -209,6 +226,10 @@ contract GARPAdapter is ICrossChainReceiver, IMessageEscrowStructs, Bytes65 {
     ));
   }
 
+  /**
+   * @notice Write escrow and collect tokens for the escrow.
+   * @dev This function is complete: It writes an escrow for the exact amount that is collected. 
+   */
   function _writeEscrow(address token, uint256 amount, address refundTo) internal returns(bytes32 escrowContext) {
     uint40 blockNumber = uint40(block.number);
     bytes32 escrowHash = _escrowHash(token, amount, refundTo, blockNumber);
@@ -216,10 +237,18 @@ contract GARPAdapter is ICrossChainReceiver, IMessageEscrowStructs, Bytes65 {
     if (_tokenEscrow[escrowHash]) revert EscrowAlreadyExists();
     _tokenEscrow[escrowHash] = true;
 
+    // Collect tokens for escrow.
+    SafeTransferLib.safeTransferFrom(token, msg.sender, address(this), amount);
+
     // Our context is 32 bytes where the first 20 is the address and the last 5 is the block number.
     return _encodeEscrowContext(refundTo, blockNumber);
   }
 
+  /**
+   * @notice Delete an escrow and burn the relevant tokens for the escrow.
+   * @dev For any random xERC20 token, this call may fail because of the burn limit
+   * However, this is not an issue since GARP allow replaying acks.
+   */
   function _deleteEscrow(address token, uint256 amount, bytes32 escrowContext) internal {
     (address refundTo, uint40 blockNumber) = _decodeEscrowContext(escrowContext);
     bytes32 escrowHash = _escrowHash(token, amount, refundTo, blockNumber);
@@ -230,6 +259,13 @@ contract GARPAdapter is ICrossChainReceiver, IMessageEscrowStructs, Bytes65 {
     IXERC20(token).burn(address(this), amount);
   }
 
+  /**
+   * @notice Delete an escrow and refunds the relevant tokens for the escrow.
+   * @dev If an ERC20 is a block-list ERC20, the refund may fail if refundTo
+   * got blacklisted. As a result the call may fail.
+   * However, GARP allows replaying acks so if the user's address is ever un-blocked
+   * they can replay the ack to release their tokens.
+   */
   function _releaseEscrow(address token, uint256 amount, bytes32 escrowContext) internal {
     (address refundTo, uint40 blockNumber) = _decodeEscrowContext(escrowContext);
     bytes32 escrowHash = _escrowHash(token, amount, refundTo, blockNumber);
