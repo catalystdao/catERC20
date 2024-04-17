@@ -49,7 +49,13 @@ contract CatERC20FactoryTest is Test {
     }
 
     /** Also contains a revert test.  */
-    function test_set_minting_limits_on_create(string calldata name, string calldata symbol, uint104[] calldata minterLimits_, address[] calldata bridges) external {
+    function test_set_minting_limits_on_create(string calldata name, string calldata symbol, uint104[] calldata minterLimits_, address[] calldata bridges_) external {
+        address[] memory bridges = bridges_;
+
+        for (uint256 i = 0; i < bridges.length; ++i) {
+            // bridges cannot have address 0 since that is the default lockbox.
+            if (bridges[i] == address(0)) bridges[i] = address(1);
+        }
 
         uint256[] memory minterLimits = new uint256[](minterLimits_.length);
         for (uint256 i = 0; i < minterLimits_.length; ++i) {

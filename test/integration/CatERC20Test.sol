@@ -92,6 +92,7 @@ contract CatERC20Test is Test {
     //--- Bridge Limits Modifications ---//
 
     function test_set_limit(address bridge, uint104 mintingLimit, uint32 time) external {
+        vm.assume(bridge != address(0));
         vm.warp(time);
 
         CATERC20.setLimits(bridge, mintingLimit, 0);
@@ -111,18 +112,30 @@ contract CatERC20Test is Test {
         assertEq(CATERC20.burningMaxLimitOf(bridge), type(uint256).max, "view function burningMaxLimitOf");
     }
 
+    function test_revert_set_limit_lockbox(address lockbox, uint104 mintingLimit) external {
+        vm.assume(lockbox != address(0));
+
+        CATERC20.setLockbox(lockbox);
+
+        vm.expectRevert(abi.encodeWithSignature("Lockbox0()"));
+        CATERC20.setLimits(lockbox, mintingLimit, 0);
+    }
+
     function test_set_limit_event(address bridge, uint104 mintingLimit) external {
+        vm.assume(bridge != address(0));
         CATERC20.setLimits(bridge, mintingLimit, 0);
         // todo: check event.
     }
 
     function test_revert_set_limit_high(address bridge) external {
+        vm.assume(bridge != address(0));
         uint256 mintingLimit = uint256(type(uint104).max) + 1; 
         vm.expectRevert(abi.encodeWithSignature("IXERC20_LimitsTooHigh()"));
         CATERC20.setLimits(bridge, mintingLimit, 0);
     }
 
     function test_revert_set_limit_only_owner(address bridge, uint256 mintingLimit, address caller) external {
+        vm.assume(bridge != address(0));
         vm.assume(caller != address(this));
 
         vm.prank(caller);
@@ -133,6 +146,7 @@ contract CatERC20Test is Test {
     //--- Minting & Burning ---//
 
     function test_mint_with_limit(address target, uint104 amount, uint104 mintingLimit, address bridge) external {
+        vm.assume(bridge != address(0));
         // First set a limit for the brige:
         CATERC20.setLimits(bridge, mintingLimit, 0);
 

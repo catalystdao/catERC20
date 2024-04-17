@@ -92,6 +92,7 @@ contract CatERC20 is ERC20, Ownable, IXERC20 {
    * @param mintingLimit The updated minting limit we are setting to the bridge
    */
   function setLimits(address bridge, uint256 mintingLimit, uint256 /* burningLimit */) public onlyOwner {
+    if (bridge == lockbox) revert Lockbox0();
     if (mintingLimit > type(uint104).max) revert IXERC20_LimitsTooHigh();
     _changeLimit(bridge, mintingLimit);
     emit BridgeLimitsSet(mintingLimit, type(uint256).max, bridge);

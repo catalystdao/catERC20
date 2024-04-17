@@ -1,19 +1,22 @@
-## Foundry
+This repository is unaudited but has very high code coverage. Use at your own risk.
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+## catERC20
 
-Foundry consists of:
+This is an optimised implementation of xERC20 (or ERC-7281). It is inspired by the https://github.com/defi-wonderland/xERC20.
 
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+### Improvements
 
-## Documentation
+- Burns are subtracted from mint limit.
+- Lockbox is set as a bridge rather than as a lockbox while being fully compatible with ERC-7281. 
+- Burns are unlimited. The burn limit serves no protection since Bridge could collect tokens from users anyway.
+- Single slot bridge config, with major gas improvements.
 
-https://book.getfoundry.sh/
+### Minor Differences
 
-## Usage
+- No Factory ownership on contract.
+- Simplified limit logic for easier auditing.
+
+## Development
 
 ### Build
 
@@ -27,40 +30,10 @@ $ forge build
 $ forge test
 ```
 
-### Format
+### coverage
 
 ```shell
-$ forge fmt
+$ forge coverage
 ```
 
-### Gas Snapshots
-
-```shell
-$ forge snapshot
-```
-
-### Anvil
-
-```shell
-$ anvil
-```
-
-### Deploy
-
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
-
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
 ```
