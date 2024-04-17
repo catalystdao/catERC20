@@ -8,6 +8,7 @@ import { IMessageEscrowStructs } from "GeneralisedIncentives/src/interfaces/IMes
 
 // xERC20
 import { IXERC20 } from "../interfaces/IXERC20.sol";
+import { ICatalystReceiver } from "../interfaces/IOnCatalyst.sol";
 
 // Solady
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
@@ -71,9 +72,24 @@ contract GARPAdapter is ICrossChainReceiver, IMessageEscrowStructs {
       return bytes.concat(hex"");
     }
 
+    bytes calldata additionalLogicData = message; // TODO: correctly decode.
     // Execute the remote logic.
-    // We assume that the caller trusts
+    if (additionalLogicData.length != 0) {
+      address dataTarget;
+      bytes calldata dataArguments = message; // TODO: correctly decode.
 
+      // We assume that the caller trusts the application they are calling. As a result, we 
+      // don't protect this outwards call. If this function isn't properly implemented or
+      // then the logic will fallback to Generalised Incentives failure => error code + full message ack.
+      try ICatalystReceiver(dataTarget).onCatalystCall(amount, dataArguments, false) {
+
+      } catch (bytes memory /* err */) {
+        if (uint8(escrowFlags & 0x02) != 0) {
+          // TODO: revert back
+          return bytes.concat(hex"");
+        }
+      }
+    }
 
     // Do some processing and then return back your ack.
     // Notice that we are sending back 00 before our message.
@@ -123,9 +139,9 @@ contract GARPAdapter is ICrossChainReceiver, IMessageEscrowStructs {
 
     // Create the message. // TODO: message format
     bytes memory message = bytes.concat(
-      bytes20(uint160(token)), // TODO: better encode
-      bytes32(amount),
       escrowFlags,
+      bytes32(uint256(uint160(token))),
+      bytes32(amount),
       calldata_
     );
 
