@@ -1,20 +1,24 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.8.4 <0.9.0;
+pragma solidity ^0.8.13;
 
 // GARP
 import { ICrossChainReceiver } from "GeneralisedIncentives/src/interfaces/ICrossChainReceiver.sol";
 import { IIncentivizedMessageEscrow } from "GeneralisedIncentives/src/interfaces/IIncentivizedMessageEscrow.sol";
 import { IMessageEscrowStructs } from "GeneralisedIncentives/src/interfaces/IMessageEscrowStructs.sol";
+import { Bytes65 } from "GeneralisedIncentives/src/utils/Bytes65.sol";
+import { ICatalystReceiver } from "../interfaces/IOnCatalyst.sol";
 
 // xERC20
 import { IXERC20 } from "../interfaces/IXERC20.sol";
-import { ICatalystReceiver } from "../interfaces/IOnCatalyst.sol";
 
 // Solady
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 
+// Payload Description
+import "./GARPAdapterPayload.sol";
+
 // TODO: be an ERC20 token such that we can fallback to minting our own dummy that can be converted at a later date.
-contract GARPAdapter is ICrossChainReceiver, IMessageEscrowStructs {
+contract GARPAdapter is ICrossChainReceiver, IMessageEscrowStructs, Bytes65 {
   error EscrowAlreadyExists();
   error NoEscrowExists();
 
@@ -44,62 +48,83 @@ contract GARPAdapter is ICrossChainReceiver, IMessageEscrowStructs {
   }
 
   // Remember to add your onlyEscrow modifier.
-  function receiveMessage(bytes32 sourceIdentifierbytes, bytes32 messageIdentifier, bytes calldata fromApplication, bytes calldata message) onlyGARP() external returns(bytes memory acknowledgement) {
-    // Success flow:
-    // 1. Try to mint tokens.
-    // Failure:
-    // - Any bool: Revert back to source chain.
-    // 2. Execude specified additional logic.
-    // Failure:
-    // - 0x01: Don't revert back to source, mint tokens to destination.
-    // - 0x02: revert back to source
-
-    // On failure:
-    // 0x01 is set:  
-    // 1. Try to mint tokens.
-    // 2. If mint fails, check if they escrowed.
+  /**
+   * @notice Called when we receive messages from GARP 
+   * 
+   * Success flow:
+   * 1. Try to mint tokens.
+   * Failure:
+   * - Any bool: Revert back to source chain.
+   * 2. Execude specified additional logic.
+   * Failure:
+   * - 0x01: Don't revert back to source, mint tokens to destination.
+   * - 0x02: revert back to source
+   * 
+   * On failure:
+   * 0x01 is set:  
+   * 1. Try to mint tokens.
+   * 2. If mint fails, check if they escrowed.
+   *
+   * @dev Only callable by GARP.
+   * If you are not familiar with GARP, when we revert GARP sends our
+   * message back along with a failure code. As a result, it is safe to revert.
+   * @param sourceChainIdentifier The source chain. Identifier is specific to the AMB used.
+   * @param fromApplication The source application that sent us this message. The encoding is specific to the AMB used.
+   * @param message The message sent to us by fromApplication.
+   * 
+   */
+  function receiveMessage(
+    bytes32 sourceChainIdentifier, 
+    bytes32 /* messageIdentifier */, 
+    bytes calldata fromApplication,
+    bytes calldata message
+  ) external onlyGARP returns(bytes memory acknowledgement) {
+    // TODO: replace the below docs.
 
     // decode packet.
-    address token;
-    address to;
-    uint256 amount;
-    bytes1 escrowFlags;
+    bytes1 escrowFlags = message[ESCROW_FLAGS];
+    address token = address(uint160(uint256(bytes32(message[TOKEN_IDENTIFIER_START : TOKEN_IDENTIFIER_END]))));
+    // TODO: Check if token approves of sourceChainIdentifier and fromApplication.
+
+    uint256 amount = uint256(bytes32(message[AMOUNT_START : AMOUNT_END]));
+    address to = address(bytes20(message[TO_ACCOUNT_START_EVM : TO_ACCOUNT_END]));
+
 
     // Try to mint tokens.
     bool mintSuccess = _mint( token, to, amount);
-    if (!mintSuccess && uint8(escrowFlags) != 0) {
-      // TODO: revert back.
-      return bytes.concat(hex"");
+    if (!mintSuccess) {
+      if (uint8(escrowFlags) != 0) {
+        // TODO: hardrevert back
+        require(false, "TODO: Set revert statement");
+      } else {
+        // TODO: Implement fallback logic
+      }
     }
 
-    bytes calldata additionalLogicData = message; // TODO: correctly decode.
+    uint16 calldata_length = uint16(bytes2(message[DATA_LENGTH_START : DATA_LENGTH_END]));
     // Execute the remote logic.
-    if (additionalLogicData.length != 0) {
-      address dataTarget;
-      bytes calldata dataArguments = message; // TODO: correctly decode.
-
+    if (calldata_length != 0) {
+      // bytes calldata additionalLogicData = message[DATA_START:];
+      address dataTarget = address(bytes20(message[DATA_START + 0: DATA_START + 20]));
+      bytes calldata dataArguments = message[DATA_START + 20: ];
       // We assume that the caller trusts the application they are calling. As a result, we 
       // don't protect this outwards call. If this function isn't properly implemented or
       // then the logic will fallback to Generalised Incentives failure => error code + full message ack.
       try ICatalystReceiver(dataTarget).onCatalystCall(amount, dataArguments, false) {
 
       } catch (bytes memory /* err */) {
+        // Check if the revert logic flag has been set.
         if (uint8(escrowFlags & 0x02) != 0) {
-          // TODO: revert back
-          return bytes.concat(hex"");
+          // TODO: hardrevert back
+          require(false, "TODO: Set revert statement");
         }
       }
     }
 
-    // Do some processing and then return back your ack.
-    // Notice that we are sending back 00 before our message.
-    // That is because if the message fails for some reason,
-    // an error code is prepended to the message.
-    // By always sending back hex"00", we ensure that the first byte is unused.
-    // Alternativly, use this byte as our own failure code.
+    // Return the message back with a success statement.
     return bytes.concat(
-      hex"00",
-      keccak256(message)
+      bytes1(0x00),
+      message
     );
   }
 
@@ -135,13 +160,16 @@ contract GARPAdapter is ICrossChainReceiver, IMessageEscrowStructs {
     // That is because we can't gurantee that the tx on the dest. side will execute.
     // As a result, we will have to escrow it regardless.
     // TODO: set escrow.
-    _writeEscrow(token, amount, refundTo);
+    bytes32 escrowContext = _writeEscrow(token, amount, refundTo);
 
     // Create the message. // TODO: message format
     bytes memory message = bytes.concat(
       escrowFlags,
-      bytes32(uint256(uint160(token))),
       bytes32(amount),
+      convertEVMTo65(token),  // Bytes65 from GARP.
+      escrowContext,
+      bytes2(0),
+      bytes2(uint16(calldata_.length)),
       calldata_
     );
 
@@ -154,18 +182,9 @@ contract GARPAdapter is ICrossChainReceiver, IMessageEscrowStructs {
     );
   }
 
-  /**
-   * @notice Burns tokens for a user
-   * @dev Can only be called by a minter
-   * @param user The address of the user who needs tokens burned
-   * @param amount The amount of tokens being burned
-   */
-  function _burn(address user, uint256 amount) public {
-  }
-
   //--- Escrow Helpers ---//
 
-  function _encodeOurContext(address refundTo, uint40 blockNumber) internal pure returns(bytes32) {
+  function _encodeEscrowContext(address refundTo, uint40 blockNumber) internal pure returns(bytes32) {
     return bytes32(
       uint256(
         bytes32(bytes20(refundTo)) // Place the address in the leftmost 20 bytes.
@@ -176,8 +195,8 @@ contract GARPAdapter is ICrossChainReceiver, IMessageEscrowStructs {
     );
   }
 
-  function _decodeOurContext(bytes32 ourContext) internal pure returns(address refundTo, uint40 blockNumber) {
-    refundTo = address(bytes20(ourContext)); // select the address from the leftmost 20 bytes.
+  function _decodeEscrowContext(bytes32 escrowContext) internal pure returns(address refundTo, uint40 blockNumber) {
+    refundTo = address(bytes20(escrowContext)); // select the address from the leftmost 20 bytes.
     blockNumber = uint40(uint256(blockNumber)); // select the blockNumber from the rightmost 5 bytes. 
   }
 
@@ -190,7 +209,7 @@ contract GARPAdapter is ICrossChainReceiver, IMessageEscrowStructs {
     ));
   }
 
-  function _writeEscrow(address token, uint256 amount, address refundTo) internal returns(bytes32 ourContext) {
+  function _writeEscrow(address token, uint256 amount, address refundTo) internal returns(bytes32 escrowContext) {
     uint40 blockNumber = uint40(block.number);
     bytes32 escrowHash = _escrowHash(token, amount, refundTo, blockNumber);
     // Check that there is no existing escrow here.
@@ -198,18 +217,21 @@ contract GARPAdapter is ICrossChainReceiver, IMessageEscrowStructs {
     _tokenEscrow[escrowHash] = true;
 
     // Our context is 32 bytes where the first 20 is the address and the last 5 is the block number.
-    return _encodeOurContext(refundTo, blockNumber);
+    return _encodeEscrowContext(refundTo, blockNumber);
   }
 
-  function _deleteEscrow(address token, uint256 amount, bytes32 ourContext) internal {
-    (address refundTo, uint40 blockNumber) = _decodeOurContext(ourContext);
+  function _deleteEscrow(address token, uint256 amount, bytes32 escrowContext) internal {
+    (address refundTo, uint40 blockNumber) = _decodeEscrowContext(escrowContext);
     bytes32 escrowHash = _escrowHash(token, amount, refundTo, blockNumber);
     if (!_tokenEscrow[escrowHash]) revert NoEscrowExists();
     _tokenEscrow[escrowHash] = false;
+
+    // Burn the escrowedTokens
+    IXERC20(token).burn(address(this), amount);
   }
 
-  function _releaseEscrow(address token, uint256 amount, bytes32 ourContext) internal {
-    (address refundTo, uint40 blockNumber) = _decodeOurContext(ourContext);
+  function _releaseEscrow(address token, uint256 amount, bytes32 escrowContext) internal {
+    (address refundTo, uint40 blockNumber) = _decodeEscrowContext(escrowContext);
     bytes32 escrowHash = _escrowHash(token, amount, refundTo, blockNumber);
     if (!_tokenEscrow[escrowHash]) revert NoEscrowExists();
     _tokenEscrow[escrowHash] = false;

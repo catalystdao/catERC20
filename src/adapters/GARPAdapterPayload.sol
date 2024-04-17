@@ -10,7 +10,7 @@ pragma solidity ^0.8.19;
 //    + AMOUNT              33  (32 bytes)
 //    + TO_ACCOUNT          65  (65 bytes)
 //    + ESCROW_SCRATCHPAD   130 (32 bytes)
-//    + RESERVED            164 (2 bytes)
+//    + RESERVED            162 (2 bytes)
 //    
 // 
 // Common Payload (end)
@@ -40,10 +40,10 @@ uint constant TO_ACCOUNT_START      = 66;
 uint constant TO_ACCOUNT_START_EVM  = 110;  // If the address is an EVM address, this is the start
 uint constant TO_ACCOUNT_END        = 130;
 
-uint constant ESCROW_SCRATCHPAD_START = 196;
-uint constant ESCROW_SCRATCHPAD_END   = 228;
+uint constant ESCROW_SCRATCHPAD_START = 130;
+uint constant ESCROW_SCRATCHPAD_END   = 162;
 
-uint constant CTX0_DATA_LENGTH_START     = 364;
-uint constant CTX0_DATA_LENGTH_END       = 366;
+uint constant DATA_LENGTH_START     = 164;
+uint constant DATA_LENGTH_END       = 166;
 
-uint constant CTX0_DATA_START            = 366;
+uint constant DATA_START            = 166;
