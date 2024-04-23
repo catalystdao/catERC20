@@ -10,6 +10,7 @@ import { ICatalystReceiver } from "../interfaces/IOnCatalyst.sol";
 
 // xERC20
 import { IXERC20 } from "../interfaces/IXERC20.sol";
+import { MiniToken } from "./MiniToken.sol";
 
 // Solady
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
@@ -17,7 +18,22 @@ import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 // Payload Description
 import "./GARPAdapterPayload.sol";
 
-// TODO: be an ERC20 token such that we can fallback to minting our own dummy that can be converted at a later date.
+// TODO: Figure out if want to always use escrows because the fallback token significantly complicates this.
+/**
+ * @notice XERC20 Adapter targeting Generalised Incentives.
+ * This allows any XERC20 to use Generalised Incentives as a wrapper around any Bridge that Generalised Incentives support.
+ * There are a few important differentiators between Generalised Incentives and other bridge adapters.
+ *
+ * 1. When bridging, it can be configured if the bridge should be escrowed. // TODO: Enable XERC20s to set if escrows should be enabled.
+ * The XERC20 tokens are not burned until after the ack is called on the source chain. As a result, the totalSupply
+ * may be higher across all XERC20 while the burn is pending.
+ * If escrows are disabled, the user will receive a placeholder token if the mint limit is exceeded.
+ // TODO: We may consider disabling the below logic.
+ * 2. The first time a mint on the destination chain fails and it isn't escrowed, may deploy a ERC20 contract. The first time and every time afterwards
+ * tokens will be minted if the mint fails on the destination chain.
+ * The token can be retried afterwards or sent back.
+ * be redeemed. If that fails (say out of gas), then it will fail back to the source chain where another attemot at dep
+ */
 contract GARPAdapter is ICrossChainReceiver, IMessageEscrowStructs, Bytes65 {
   error EscrowAlreadyExists();
   error NoEscrowExists();
@@ -25,6 +41,8 @@ contract GARPAdapter is ICrossChainReceiver, IMessageEscrowStructs, Bytes65 {
   IIncentivizedMessageEscrow immutable public GARP;
 
   mapping(bytes32 tokenEscrowHash => bool) _tokenEscrow;
+  
+  mapping(address => address) _tempTokenForXERC20;
 
   constructor(address garp) {
     // Set the escrow.
@@ -40,23 +58,51 @@ contract GARPAdapter is ICrossChainReceiver, IMessageEscrowStructs, Bytes65 {
     _;
   }
 
+  /** @notice Called the route that is tried has no allowance. */
+  error NotAllowedRemote();
+
+  /**
+   * @notice Determines if a remote XERC20 is allowed to mint a local XERC20
+   * @dev By default only allowed if they are equal, but can be overridden with permissions
+   * It should revert on invald route
+   */
+  function _allowedRemote(bytes32 /* remoteChainIdentifier */, bytes32 remoteXERC20, bytes32 localXERC20) internal virtual {
+    if (remoteXERC20 != localXERC20) revert NotAllowedRemote();
+  }
+
+  //--- Set Connections 
+
   //--- Generalised Incentives (GARP) ---//
 
-  function receiveAck(bytes32 destinationIdentifier, bytes32 messageIdentifier, bytes calldata acknowledgement) onlyGARP external {
+  function receiveAck(bytes32 /* destinationIdentifier */, bytes32 /* messageIdentifier */, bytes calldata acknowledgement) onlyGARP external {
     // Check if escrow was specified.
     bytes1 status = acknowledgement[0];
 
     // decode packet.
-    address token = address(uint160(uint256(bytes32(acknowledgement[TOKEN_IDENTIFIER_START + 1 : TOKEN_IDENTIFIER_END + 1]))));
+    bytes1 escrowFlag = bytes1(acknowledgement[ESCROW_FLAGS]);
+    address token = address(uint160(uint256(bytes32(acknowledgement[SOURCE_TOKEN_IDENTIFIER_START + 1 : SOURCE_TOKEN_IDENTIFIER_END + 1]))));
     uint256 amount = uint256(bytes32(acknowledgement[AMOUNT_START + 1 : AMOUNT_END + 1]));
     bytes32 escrowContext = bytes32(acknowledgement[ESCROW_SCRATCHPAD_START + 1 : ESCROW_SCRATCHPAD_END + 1]);
     
-    // Check if the call was successful
-    if (status == 0x00) {
-      _deleteEscrow(token, amount, escrowContext);
+    // Check if an escrow was set
+    if (uint8(escrowFlag) > 0) {
+      // Check if the call was successful
+      if (status == 0x00) {
+        _deleteEscrow(token, amount, escrowContext);
+      } else {
+        // status > 0x00, swap failed.
+        _releaseEscrow(token, amount, escrowContext);
+      }
     } else {
-      // status > 0x00, swap failed.
-      _releaseEscrow(token, amount, escrowContext);
+      // Check if call failed.
+      if (status != 0x00) {
+        // We need to try to re-mint token or mint temp token. Get or create our temp token.
+        address tempToken = _getOrCreateTempToken(token);
+
+        (address refundTo, ) = _decodeEscrowContext(escrowContext);
+        // Mint tokens:
+        MiniToken(tempToken).mint(refundTo, amount);
+      }
     }
 
     // TODO: Emit event.
@@ -93,19 +139,21 @@ contract GARPAdapter is ICrossChainReceiver, IMessageEscrowStructs, Bytes65 {
     bytes calldata fromApplication,
     bytes calldata message
   ) external onlyGARP returns(bytes memory acknowledgement) {
-    // TODO: replace the below docs.
+    // TODO: verify adapter through fromApplication
 
-    // decode packet.
+    // Decode tokens and check if the source token is allowed to mint the destination token.
+    bytes32 sourceToken = bytes32(message[SOURCE_TOKEN_IDENTIFIER_START : SOURCE_TOKEN_IDENTIFIER_END]);
+    bytes32 destinationToken = bytes32(message[DESTINATION_TOKEN_IDENTIFIER_START : DESTINATION_TOKEN_IDENTIFIER_END]);
+    _allowedRemote(sourceChainIdentifier, sourceToken, destinationToken);
+
     bytes1 escrowFlags = message[ESCROW_FLAGS];
-    address token = address(uint160(uint256(bytes32(message[TOKEN_IDENTIFIER_START : TOKEN_IDENTIFIER_END]))));
-    // TODO: Check if token approves of sourceChainIdentifier and fromApplication.
-
     uint256 amount = uint256(bytes32(message[AMOUNT_START : AMOUNT_END]));
-    address to = address(bytes20(message[TO_ACCOUNT_START_EVM : TO_ACCOUNT_END]));
+    address toAccount = address(bytes20(message[TO_ACCOUNT_START_EVM : TO_ACCOUNT_END]));
+    address toToken = address(uint160(uint256(destinationToken)));
 
     // Try to mint tokens.
     bool mintSuccess;
-    try IXERC20(token).mint(to, amount) {
+    try IXERC20(toToken).mint(toAccount, amount) {
       mintSuccess = true;
     } catch (bytes memory /* err */) {
       mintSuccess = false;
@@ -116,7 +164,10 @@ contract GARPAdapter is ICrossChainReceiver, IMessageEscrowStructs, Bytes65 {
         // TODO: hardrevert back
         require(false, "TODO: Set revert statement");
       } else {
-        // TODO: Implement fallback logic
+        // Get or create our temp token.
+        address tempToken = _getOrCreateTempToken(toToken);
+        // Mint tokens:
+        MiniToken(tempToken).mint(toAccount, amount);
       }
     }
 
@@ -157,28 +208,33 @@ contract GARPAdapter is ICrossChainReceiver, IMessageEscrowStructs, Bytes65 {
    * TODO: params and args.
    */
   function burn(
-    address token,
+    address sourceToken,
+    bytes32 destinationToken,
     uint256 amount,
     bytes1 escrowFlags,
     address refundTo,
+    bytes calldata toAccount,
     bytes calldata calldata_,
     bytes32 destinationIdentifier,
     bytes calldata destinationAddress, // TODO: set based on auth and destinationIdentifier
     IncentiveDescription calldata incentive,
     uint64 deadline
-  ) external payable returns(uint256 gasRefund, bytes32 messageIdentifier) {
+  ) external payable checkBytes65Address(toAccount) returns(uint256 gasRefund, bytes32 messageIdentifier) {
+    // TODO: Disallow escrows
     // Collect tokens from user and write escrow.
     // Token collection is done together with the escrow, to ensure escrow actions are complete.
-    bytes32 escrowContext = _writeEscrow(token, amount, refundTo);
+    bytes32 escrowContext = _writeEscrow(sourceToken, amount, refundTo);
     // _writeEscrow makes an external call. There should be no storage modifications beyond this call.
 
     // Create the message.
     bytes memory message = bytes.concat(
       escrowFlags,
       bytes32(amount),
-      convertEVMTo65(token),  // Bytes65 from GARP.
+      bytes32(uint256(uint160(sourceToken))),
+      destinationToken,
+      toAccount,
       escrowContext,
-      bytes2(0),
+      bytes32(0),
       bytes2(uint16(calldata_.length)),
       calldata_
     );
@@ -192,6 +248,22 @@ contract GARPAdapter is ICrossChainReceiver, IMessageEscrowStructs, Bytes65 {
     );
 
     // TODO: emit event.
+  }
+
+  //--- Temp Token Helpers ---//
+
+  function tempTokenForXERC20(address xerc20) external view returns(address tkn) {
+    return _tempTokenForXERC20[xerc20];
+  }
+
+  function _getOrCreateTempToken(address xerc20) internal returns(address tempToken) {
+    tempToken = _tempTokenForXERC20[xerc20];
+    if (tempToken == address(0)) {
+      // TODO: get temp token name and symbol
+      string memory tempTokenName = "";
+      string memory tempTokenSymbol = "";
+      tempToken = address(new MiniToken{salt: bytes32(bytes20(xerc20))}(tempTokenName, tempTokenSymbol));
+    }
   }
 
   //--- Escrow Helpers ---//
