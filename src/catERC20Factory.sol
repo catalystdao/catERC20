@@ -3,8 +3,8 @@ pragma solidity >=0.8.4 <0.9.0;
 
 import { IXERC20Factory } from './interfaces/IXERC20Factory.sol';
 
-import { CatERC20 } from './catERC20.sol';
-import { CatLockbox } from './catLockbox.sol';
+import { CatERC20 } from './CatERC20.sol';
+import { CatLockbox } from './CatLockbox.sol';
 
 
 

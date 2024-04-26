@@ -234,7 +234,17 @@ contract CatERC20 is ERC20, Ownable, IXERC20 {
     bridgeContext.currentLimit = uint104(newCurrentLimit);
   }
 
-
+  /**
+   * @notice Calculates the new limit based on decay in time.
+   * @dev Reverts if extraDifference cannot fit into the limit.
+   * 
+   * @param maxLimit The maximum for the bridge
+   * @param currentLimit The current used of the limit
+   * @param lastTouched When the last change to the limit was made
+   * @param currentTime The current time. Please provide block.timestamp.
+   * @param deltaLimit The delta that has to be applied to the limit.
+   * @return newLimit The new current limit
+   */
 
   function _getCurrentLimit(
     uint256 maxLimit,
