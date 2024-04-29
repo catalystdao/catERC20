@@ -245,7 +245,6 @@ contract CatERC20 is ERC20, Ownable, IXERC20 {
    * @param deltaLimit The delta that has to be applied to the limit.
    * @return newLimit The new current limit
    */
-
   function _getCurrentLimit(
     uint256 maxLimit,
     uint256 currentLimit,

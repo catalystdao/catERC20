@@ -6,8 +6,6 @@ import { IXERC20Factory } from './interfaces/IXERC20Factory.sol';
 import { CatERC20 } from './CatERC20.sol';
 import { CatLockbox } from './CatLockbox.sol';
 
-
-
 contract CatERC20Factory is IXERC20Factory {
 
   /**
