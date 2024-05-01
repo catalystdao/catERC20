@@ -2,9 +2,9 @@
 pragma solidity ^0.8.13;
 
 import { Test } from "forge-std/Test.sol";
-import { CatERC20 } from "../../src/CatERC20.sol";
-import { CatLockbox } from "../../src/CatLockbox.sol";
-import { CatERC20Factory } from "../../src/CatERC20Factory.sol";
+import { CatERC20 } from "../../src/catERC20.sol";
+import { CatLockbox } from "../../src/catLockbox.sol";
+import { CatERC20Factory } from "../../src/catERC20Factory.sol";
 
 contract CatERC20FactoryTest is Test {
     CatERC20Factory CATERC20FACTORY;
