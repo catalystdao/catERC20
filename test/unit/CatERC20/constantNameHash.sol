@@ -3,7 +3,7 @@ pragma solidity ^0.8.13;
 
 import {Test} from "forge-std/Test.sol";
 
-import { CatERC20 } from "../../../src/CatERC20.sol";
+import { CatERC20 } from "../../../src/catERC20.sol";
 
 contract CatERC20ConstantNameHash is CatERC20 {
     function test() external {}

@@ -2,7 +2,7 @@
 pragma solidity ^0.8.13;
 
 import {Test, stdError} from "forge-std/Test.sol";
-import { CatERC20, Bridge } from "../../src/CatERC20.sol";
+import { CatERC20, Bridge } from "../../src/catERC20.sol";
 
 contract CatERC20Test is Test {
 
