@@ -243,7 +243,7 @@ contract CatERC20 is ERC20, Ownable, IXERC20 {
    * @param lastTouched When the last change to the limit was made
    * @param currentTime The current time. Please provide block.timestamp.
    * @param deltaLimit The delta that has to be applied to the limit.
-   * @return newLimit The new current limit
+   * @return newCurrentLimit The new current limit
    */
   function _getCurrentLimit(
     uint256 maxLimit,
