@@ -5,19 +5,19 @@ import {Test} from "forge-std/Test.sol";
 
 import { CatERC20 } from "../../../src/catERC20.sol";
 
-contract CatERC20getCurrentLimit is CatERC20 {
+contract CatERC20calcNewCurrentLimit is CatERC20 {
     function test() external {}
 
     constructor(string memory name, string memory symbol, address owner) CatERC20(name, symbol, owner) {}
 
-    function getCurrentLimit(
+    function calcNewCurrentLimit(
         uint256 maxLimit,
         uint256 currentLimit,
         uint256 lastTouched,
         uint256 currentTime,
         int256 deltaLimit
     ) external pure returns(uint256 newLimit) {
-        return _getCurrentLimit(maxLimit, currentLimit, lastTouched, currentTime, deltaLimit);
+        return _calcNewCurrentLimit(maxLimit, currentLimit, lastTouched, currentTime, deltaLimit);
     }
 }
 
@@ -25,10 +25,10 @@ contract CatERC20UnitTest is Test {
 
     uint256 DURATION = 1 days;
 
-    CatERC20getCurrentLimit GCL;
+    CatERC20calcNewCurrentLimit GCL;
 
     function setUp() external {
-        GCL = new CatERC20getCurrentLimit("", "", address(this));
+        GCL = new CatERC20calcNewCurrentLimit("", "", address(this));
     }
 
     function test_limit_simple_add(uint104 maxLimit, uint104 percentageOfMaxLimit, uint40 lastTouched) view external {
@@ -39,7 +39,7 @@ contract CatERC20UnitTest is Test {
             uint256(maxLimit) * uint256(percentageOfMaxLimit) / type(uint104).max
         ));
 
-        uint256 newLimit = GCL.getCurrentLimit(
+        uint256 newLimit = GCL.calcNewCurrentLimit(
             uint256(maxLimit),
             currentLimit,
             uint256(lastTouched),
@@ -53,7 +53,7 @@ contract CatERC20UnitTest is Test {
     function test_unlimited_limit(uint256 currentLimit, uint256 lastTouched, uint256 currentTime, int256 deltaLimit) view external {
         uint256 maxLimit = uint256(type(uint104).max);
 
-        uint256 newLimit = GCL.getCurrentLimit(
+        uint256 newLimit = GCL.calcNewCurrentLimit(
             maxLimit,
             currentLimit,
             lastTouched,
@@ -68,7 +68,7 @@ contract CatERC20UnitTest is Test {
         vm.assume(maxLimit < type(uint104).max - 1);
 
         vm.expectRevert(abi.encodeWithSignature("IXERC20_NotHighEnoughLimits()"));
-        GCL.getCurrentLimit(
+        GCL.calcNewCurrentLimit(
             uint256(maxLimit),
             0,
             lastTouched,
@@ -80,7 +80,7 @@ contract CatERC20UnitTest is Test {
     function test_delta_gt_duration(int104 deltaLimit, uint40 lastTouched, uint8 extraDiff, uint256 currentLimit) view external {
         uint256 maxLimit = uint256(type(uint104).max - 1);
 
-        uint256 newLimit = GCL.getCurrentLimit(
+        uint256 newLimit = GCL.calcNewCurrentLimit(
             maxLimit,
             currentLimit,
             uint256(lastTouched),
@@ -99,7 +99,7 @@ contract CatERC20UnitTest is Test {
         vm.assume(maxLimit != type(uint104).max);
         int256 deltaLimit = 0;
 
-        uint256 newLimit = GCL.getCurrentLimit(
+        uint256 newLimit = GCL.calcNewCurrentLimit(
             maxLimit,
             currentLimit,
             uint256(lastTouched),
@@ -121,7 +121,7 @@ contract CatERC20UnitTest is Test {
         int256 deltaLimit = int256(uint256(maxLimit))*int256(deltaPercentage) / int256(type(int104).max);
         uint256 currentLimit = uint256(maxLimit) * uint256(currentLimitPercentage)/ uint256(type(uint104).max);
 
-        uint256 newLimit = GCL.getCurrentLimit(
+        uint256 newLimit = GCL.calcNewCurrentLimit(
             maxLimit,
             currentLimit,
             uint256(lastTouched),
@@ -155,7 +155,7 @@ contract CatERC20UnitTest is Test {
         if (deltaLimit + referenceCurrentLimit <= maxLimit) return;
 
         vm.expectRevert(abi.encodeWithSignature("IXERC20_NotHighEnoughLimits()"));
-        GCL.getCurrentLimit(
+        GCL.calcNewCurrentLimit(
             maxLimit,
             currentLimit,
             uint256(lastTouched),

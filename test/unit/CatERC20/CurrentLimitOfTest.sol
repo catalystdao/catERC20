@@ -5,19 +5,19 @@ import {Test} from "forge-std/Test.sol";
 
 import { CatERC20, Bridge } from "../../../src/catERC20.sol";
 
-contract CatERC20getCurrentLimit is CatERC20 {
+contract CatERC20calcNewCurrentLimit is CatERC20 {
     function test() external {}
 
     constructor(string memory name, string memory symbol, address owner) CatERC20(name, symbol, owner) {}
 
-    function getCurrentLimit(
+    function calcNewCurrentLimit(
         uint256 maxLimit,
         uint256 currentLimit,
         uint256 lastTouched,
         uint256 currentTime,
         int256 deltaLimit
     ) external pure returns(uint256 newLimit) {
-        return _getCurrentLimit(maxLimit, currentLimit, lastTouched, currentTime, deltaLimit);
+        return _calcNewCurrentLimit(maxLimit, currentLimit, lastTouched, currentTime, deltaLimit);
     }
 
     function setBridge(address bridge, Bridge calldata bridgeContext) external {
@@ -29,15 +29,15 @@ contract CatERC20CurrentLimitOfTest is Test {
 
     uint256 DURATION = 1 days;
 
-    CatERC20getCurrentLimit GCL;
+    CatERC20calcNewCurrentLimit GCL;
 
     function setUp() external {
-        GCL = new CatERC20getCurrentLimit("", "", address(this));
+        GCL = new CatERC20calcNewCurrentLimit("", "", address(this));
     }
 
     function test_compare_mintingCurrentLimitOf(address bridge, Bridge calldata bridgeContext) external {
         GCL.setBridge(bridge, bridgeContext);
-        uint256 expectedLimit = GCL.getCurrentLimit(
+        uint256 expectedLimit = GCL.calcNewCurrentLimit(
             bridgeContext.maxLimit,
             bridgeContext.currentLimit,
             bridgeContext.lastTouched, 

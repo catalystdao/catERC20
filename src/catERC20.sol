@@ -6,7 +6,7 @@ import { IXERC20 } from "./interfaces/IXERC20.sol";
 import { ERC20 } from "solady/tokens/ERC20.sol";
 import { Ownable } from "solady/auth/Ownable.sol";
 
-
+/** @notice Optimised for storage, fits into a single slot: 6 + 13 + 13 = 32 */
 struct Bridge {
     uint48 lastTouched;
     uint104 maxLimit;
@@ -17,9 +17,13 @@ struct Bridge {
  * @notice xERC20 token remix which improves security by using a combined mint & burn buffer.
  * This allows administrators to set a lower overall limit.
  * Inspired by https://github.com/defi-wonderland/xERC20
+ * type(uint104).max is a magic number in this contract and implies unlimited mints.
  * @dev For optimisations purposes, the bridge limits can't be larger than uint104.
  */
 contract CatERC20 is ERC20, Ownable, IXERC20 {
+
+  /** @notice Allow unlimited mints. @dev This is the max size of the Bridge struct */
+  uint256 constant UNLIMITED_MINTS = type(uint104).max;
 
   error AmountTooHigh();
   error LockboxAlreadySet();
@@ -80,7 +84,7 @@ contract CatERC20 is ERC20, Ownable, IXERC20 {
     if (lockbox_ == address(0)) revert Lockbox0();
     if (lockbox != address(0)) revert LockboxAlreadySet();
     lockbox = lockbox_;
-    _changeLimit(lockbox_, type(uint104).max);
+    _changeLimit(lockbox_, UNLIMITED_MINTS);
     emit LockboxSet(lockbox_);
   }
 
@@ -93,7 +97,8 @@ contract CatERC20 is ERC20, Ownable, IXERC20 {
    */
   function setLimits(address bridge, uint256 mintingLimit, uint256 /* burningLimit */) public onlyOwner {
     if (bridge == lockbox) revert Lockbox0();
-    if (mintingLimit > type(uint104).max) revert IXERC20_LimitsTooHigh();
+    // UNLIMITED_MINTS == type(uint104).max.
+    if (mintingLimit > UNLIMITED_MINTS) revert IXERC20_LimitsTooHigh();
     _changeLimit(bridge, mintingLimit);
     emit BridgeLimitsSet(mintingLimit, type(uint256).max, bridge);
   }
@@ -133,7 +138,10 @@ contract CatERC20 is ERC20, Ownable, IXERC20 {
    * @param amount The amount of tokens being burned
    */
   function burn(address user, uint256 amount) public {
-    require(amount < uint256(type(int256).max));
+    // if amount > -type(int256).min then it would overflow. int256 contains 1 more negative integer:
+    // -type(int256).min == type(int256).max - 1. The comparision amount > type(int256).max - 1 is
+    //  equiv.: amount >= type(int256).max because amount is discrete.
+    if (amount >= uint256(type(int256).max)) revert AmountTooHigh();
     if (user != msg.sender) _spendAllowance(user, msg.sender, amount);
 
     _useBridgeLimits(msg.sender, -int256(amount));
@@ -169,8 +177,8 @@ contract CatERC20 is ERC20, Ownable, IXERC20 {
    */
   function mintingCurrentLimitOf(address bridge) public view returns (uint256 limit) {
     Bridge storage bridgeContext = bridges[bridge];
-    return limit = _getCurrentLimit(
-      bridgeContext.maxLimit, // Use the old limit to compute the delta correctly.
+    return limit = _calcNewCurrentLimit(
+      bridgeContext.maxLimit,
       bridgeContext.currentLimit,
       bridgeContext.lastTouched,
       block.timestamp,
@@ -199,7 +207,7 @@ contract CatERC20 is ERC20, Ownable, IXERC20 {
 
     uint256 currentTime = block.timestamp;
 
-    uint256 newCurrentLimit = _getCurrentLimit(
+    uint256 newCurrentLimit = _calcNewCurrentLimit(
       bridgeContext.maxLimit,
       bridgeContext.currentLimit,
       bridgeContext.lastTouched,
@@ -221,7 +229,7 @@ contract CatERC20 is ERC20, Ownable, IXERC20 {
 
     uint256 currentTime = block.timestamp;
 
-    uint256 newCurrentLimit = _getCurrentLimit(
+    uint256 newCurrentLimit = _calcNewCurrentLimit(
       bridgeContext.maxLimit, // Use the old limit to compute the delta correctly.
       bridgeContext.currentLimit,
       bridgeContext.lastTouched,
@@ -238,6 +246,13 @@ contract CatERC20 is ERC20, Ownable, IXERC20 {
    * @notice Calculates the new limit based on decay in time.
    * @dev Reverts if extraDifference cannot fit into the limit.
    * 
+   * Function constraints:
+   * maxLimit <= type(uint104).max.
+   * currentLimit <= type(uint104).max but may be larger than currentLimit.
+   * lastTouched <= reasonable timestamp <= type(uint48).max.
+   * currentTime <= reasonable timestamp <= type(uint48).max.
+   *  type(int256).min <= deltaLimit <= type(int256).max.
+   * 
    * @param maxLimit The maximum for the bridge
    * @param currentLimit The current used of the limit
    * @param lastTouched When the last change to the limit was made
@@ -245,7 +260,7 @@ contract CatERC20 is ERC20, Ownable, IXERC20 {
    * @param deltaLimit The delta that has to be applied to the limit.
    * @return newCurrentLimit The new current limit
    */
-  function _getCurrentLimit(
+  function _calcNewCurrentLimit(
     uint256 maxLimit,
     uint256 currentLimit,
     uint256 lastTouched,
@@ -253,8 +268,9 @@ contract CatERC20 is ERC20, Ownable, IXERC20 {
     int256 deltaLimit
   ) internal pure returns (uint256 newCurrentLimit) {
     // Check if maxLimit is a magic number.
-    if (maxLimit == type(uint104).max) return 0;
+    if (maxLimit == UNLIMITED_MINTS) return 0;
     // Check that extraDifference < maxLimit.
+    // int256(maxLimit) cannot overflow in casting since maxLimit < type(uint104).max < type(int256).max
     if (int256(maxLimit) < deltaLimit) revert IXERC20_NotHighEnoughLimits();
 
     uint256 deltaTime;
@@ -272,14 +288,23 @@ contract CatERC20 is ERC20, Ownable, IXERC20 {
     newCurrentLimit = currentLimit > decay ? currentLimit - decay : 0;
 
     // If deltaLimit < 0, then we don't have to check if it matches the limit.
-    // Likewise when deltaLimit = 0.
-    if (deltaLimit <= 0) return newCurrentLimit > uint256(-deltaLimit) ? newCurrentLimit - uint256(-deltaLimit) : 0;
+    // Likewise when deltaLimit = 0. 
+    // The deltaLimit = 0 check is important when newCurrentLimit > maxLimit.
+    unchecked {
+      // Unchecked is important for uint256(-deltaLimit).
+      // If deltaLimit = type(int256).min then -deltaLimit overflows since signed integers
+      // are larger negative than positive by exactly 1.
+      // type(int256).min == [100000...00000]. We change the sign by taking the compliment and adding 1: -type(int256).min === [0111111...11111] + 1 = type(int256).max + 1 = uint256(-type(int256).min)
+      if (deltaLimit <= 0)
+        return newCurrentLimit > uint256(-deltaLimit) ? newCurrentLimit - uint256(-deltaLimit) : 0;
+    }
 
     unchecked {
       // deltaLimit is bounded by maxLimit. newCurrentLimit is bounded by type(uint104).max. Each of which is bounded by type(uint256).max / 2.
       if (maxLimit < uint256(deltaLimit) + newCurrentLimit) revert IXERC20_NotHighEnoughLimits();
       // Same bounded argument: newCurrentLimit + deltaLimit < type(104).max + maxLimit < type(104).max * 2.
-      return uint256(int256(newCurrentLimit) + deltaLimit);
+      // We also know that deltaLimit > 0 so it can be casted to uint256.
+      return newCurrentLimit + uint256(deltaLimit);
     }
   }
 }
