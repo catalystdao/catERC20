@@ -13,9 +13,9 @@ contract DeployFactoryScript is Script, StdAssertions {
     function deployFactory() public returns(CatERC20Factory fact) {
         vm.broadcast();
 
-        fact = new CatERC20Factory{salt: bytes32(0x674bffae0d0816cab9be2a8df93557866622de5e01b16c801d7cc4fe66d7163c)}(); // 0x000000000d53e6b5968b70Fdd3cb68B5e216cE93
+        fact = new CatERC20Factory{salt: bytes32(0x121b3296e0ac6ed96b0e1c2ce9a6213991b7d8549fa9f83b794fb501b8603cc3)}();
 
-        assertEq(address(fact), 0x000000000d53e6b5968b70Fdd3cb68B5e216cE93);
+        assertEq(address(fact), 0x0000000065a80d469A41ef286008afA7BF9E252b);
         console2.logAddress(address(fact));
     }
 
