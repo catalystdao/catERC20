@@ -1,5 +1,24 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.13;
+pragma solidity ^0.8.22;
+
+/*
+                           ＿
+                       ／´    ｀フ
+           ,  '' ｀ ｀/          ,!
+        , '          レ    O    Oミ  
+        ;               `ミ __,xノﾞ､   A Catalyst for Cross-chain?
+        i         ﾐ      ; ,､､､、  ヽ、  
+    ,.-‐!          ﾐ    i        ｀ヽ.._,,)
+  / /´｀｀､        ミ  ヽ.           @@@ @
+  ヽ.ー─'´) ｰｰ -‐''ゝ､,,))         @@@@@  @@@
+   ''''''                      @@@  @@@@@  @@@@@
+                               @@@@@ @@@@@ @@@@@@@  
+                            @@  @@@@@  @@@  @@@@@@@   
+                             @@@   @@@@ @@@  @@@@@    
+                               @@@@  @@@  @@  @@      
+                                  @@@  @@@ @@         
+                                     @@@            
+*/
 
 import { IXERC20 } from "./interfaces/IXERC20.sol";
 
@@ -14,38 +33,62 @@ struct Bridge {
 }
 
 /** 
- * @notice xERC20 token remix which improves security by using a combined mint & burn buffer.
- * This allows administrators to set a lower overall limit.
- * Inspired by https://github.com/defi-wonderland/xERC20
+ * @notice Optimised xERC20 token implementation
+ * This xERC20 implementation does not use a burn limit but rather implements a combined
+ * burn and mint limit where burns are subtracted from mints. This protects the contract
+ * against DoS attacks and improves security by allowing administrators to generally
+ * set a lower limit.
+ *
+ * xERC20 is a standard for cross-chain tokens where any bridge can burn and mint these
+ * tokens by the owner setting bridge limits. It exists in conjunction with a lockbox
+ * that allows non-cross-chain native tokens to be wrapped into a xERC20 compliant token.
+ *
+ * This contract can be used with or without a Factory to allow users to easily
+ * deploy their token to any chain while maintaining the same address. Likewise, a lockbox
+ * is not required and the token can be used as a token on its own.
+ *
+ * The implementation is inspired by https://github.com/defi-wonderland/xERC20.
+ * @dev For optimisation purposes, the bridge limits can't be larger than uint104.
  * type(uint104).max is a magic number in this contract and implies unlimited mints.
- * @dev For optimisations purposes, the bridge limits can't be larger than uint104.
+ * The designated Lockbox is set as a Bridge with unlimited mints rather than
+ * implementing dedicated logic if the sender is the lockbox.
+ * 
+ * While the mint limit can maximum be type(uint104).max, bridges can limit more IFF 
+ * their limit is set to type(uint104).max as then any mint is ignored.
  */
 contract CatERC20 is ERC20, Ownable, IXERC20 {
 
-  /** @notice Allow unlimited mints. @dev This is the max size of the Bridge struct */
+  /** 
+   * @notice Allow unlimited mints.
+   * @dev This is the max size of the Bridge struct.
+   */
   uint256 constant UNLIMITED_MINTS = type(uint104).max;
 
-  error AmountTooHigh();
-  error LockboxAlreadySet();
-  error Lockbox0();
-
-  string NAME;
-  string SYMBOL;
-
   /**
-   * @notice The duration it takes for the limits to fully replenish
+   * @notice The duration it takes for the limits to fully replenish.
    */
-  uint256 private constant DURATION = 1 days;
+  uint256 constant DURATION = 1 days;
+
+  error AmountTooHigh(); // 0xfd7850ad
+  error LockboxAlreadySet(); // 0xa7d05b56
+  error Lockbox0(); // 0x3f528d68
 
   /**
-   * @notice The address of the lockbox contract
+   * @notice Maps bridge address to bridge configurations.
+   */
+  mapping(address bridgeAddress => Bridge bridgeContext) public bridges;
+  
+
+  /**
+   * @notice The address of the lockbox contract.
    */
   address public lockbox;
 
-  /**
-   * @notice Maps bridge address to bridge configurations
-   */
-  mapping(address bridgeAddress => Bridge bridgeContext) public bridges;
+
+  // Set name and symbol.
+  // _Immutable variables cannot have a non-value type_, so they are just storage variables.
+  string NAME;
+  string SYMBOL;
 
   constructor(string memory name_, string memory symbol_, address owner) {
       NAME = name_;
@@ -57,8 +100,11 @@ contract CatERC20 is ERC20, Ownable, IXERC20 {
 
   bytes32 immutable CONSTANT_NAME_HASH;
 
-  /// @dev For more performance, override to return the constant value
-  /// of `keccak256(bytes(name()))` if `name()` will never change.
+  
+  /** 
+   * @dev For more performance, override to return the constant value
+   * of `keccak256(bytes(name()))` if `name()` will never change.
+   */
   function _constantNameHash() internal view override returns (bytes32 result) {
     return result = CONSTANT_NAME_HASH;
   }
@@ -76,9 +122,9 @@ contract CatERC20 is ERC20, Ownable, IXERC20 {
   //--- Admin Set Functions ---//
 
   /**
-   * @notice Sets the lockbox address
+   * @notice Sets the lockbox address.
    * @dev Sets unlimited limits for the lockbox.
-   * @param lockbox_ The address of the lockbox
+   * @param lockbox_ The address of the lockbox.
    */
   function setLockbox(address lockbox_) public onlyOwner {
     if (lockbox_ == address(0)) revert Lockbox0();
@@ -89,11 +135,11 @@ contract CatERC20 is ERC20, Ownable, IXERC20 {
   }
 
   /**
-   * @notice Updates the limits of any bridge
-   * @dev Can only be called by the owner
+   * @notice Updates the limits of any bridge.
+   * @dev Can only be called by the owner.
    * type(uint104).max is a magic number, it is unlimited.
-   * @param bridge The address of the bridge we are setting the limits too
-   * @param mintingLimit The updated minting limit we are setting to the bridge
+   * @param bridge The address of the bridge we are setting the limits to.
+   * @param mintingLimit The updated minting limit we are setting to the bridge.
    */
   function setLimits(address bridge, uint256 mintingLimit, uint256 /* burningLimit */) public onlyOwner {
     if (bridge == lockbox) revert Lockbox0();
@@ -106,10 +152,10 @@ contract CatERC20 is ERC20, Ownable, IXERC20 {
   //--- Bridge functions ---//
 
   /**
-   * @notice Mints tokens for a user
+   * @notice Mints tokens for a user.
    * @dev Can only be called by a minter: Bridge, Lockbox, or owner.
-   * @param user The address of the user who needs tokens minted
-   * @param amount The amount of tokens being minted
+   * @param user The address of the user who needs tokens minted.
+   * @param amount The amount of tokens being minted.
    */
   function mint(address user, uint256 amount) public {
     if (amount > uint256(type(int256).max)) revert AmountTooHigh();
@@ -119,27 +165,27 @@ contract CatERC20 is ERC20, Ownable, IXERC20 {
   }
 
   /**
-   * @notice Lets the owner mint tokens.
+   * @notice Let the owner mint tokens.
    * This function exists to make it easier for owners to mint tokens.
-   * The XERC20 standard is a "mintable token", since the owner
+   * The XERC20 standard is a "mintable token", since the owner.
    * can register themselves as a bridge and mint tokens that way.
-   * @dev Can only be called by owner
-   * @param user The address of the user who needs tokens minted
-   * @param amount The amount of tokens being minted
+   * @dev Can only be called by the owner.
+   * @param user The address of the user who needs tokens minted.
+   * @param amount The amount of tokens being minted.
    */
   function ownableMint(address user, uint256 amount) external onlyOwner {
     _mint(user, amount);
   }
 
   /**
-   * @notice Burns tokens for a user
-   * @dev Can only be called by a minter
-   * @param user The address of the user who needs tokens burned
-   * @param amount The amount of tokens being burned
+   * @notice Burns tokens for a user.
+   * @dev Can only be called by a minter.
+   * @param user The address of the user who needs tokens burned.
+   * @param amount The amount of tokens being burned.
    */
   function burn(address user, uint256 amount) public {
     // if amount > -type(int256).min then it would overflow. int256 contains 1 more negative integer:
-    // -type(int256).min == type(int256).max - 1. The comparision amount > type(int256).max - 1 is
+    // -type(int256).min == type(int256).max - 1. The comparison amount > type(int256).max - 1 is
     //  equiv.: amount >= type(int256).max because amount is discrete.
     if (amount >= uint256(type(int256).max)) revert AmountTooHigh();
     if (user != msg.sender) _spendAllowance(user, msg.sender, amount);
@@ -151,29 +197,29 @@ contract CatERC20 is ERC20, Ownable, IXERC20 {
   //--- View Bridge Limits ---//
 
   /**
-   * @notice Returns the max limit of a bridge
+   * @notice Returns the max limit of a bridge.
    *
-   * @param bridge the bridge we are viewing the limits of
-   * @return limit The limit the bridge has
+   * @param bridge the bridge we are viewing the limits of.
+   * @return limit The limit the bridge has.
    */
   function mintingMaxLimitOf(address bridge) public view returns (uint256 limit) {
     return limit = bridges[bridge].maxLimit;
   }
 
   /**
-   * @notice Returns the max limit of a bridge
+   * @notice Returns the max limit of a bridge.
    *
-   * @return limit The limit the bridge has
+   * @return limit The limit the bridge has.
    */
   function burningMaxLimitOf(address /* bridge */) public pure returns (uint256 limit) {
     return limit = type(uint256).max;
   }
 
   /**
-   * @notice Returns the current limit of a bridge
+   * @notice Returns the current mint limit of a bridge.
    *
-   * @param bridge the bridge we are viewing the limits of
-   * @return limit The limit the bridge has
+   * @param bridge the bridge we are viewing the limits of.
+   * @return limit The limit the bridge has.
    */
   function mintingCurrentLimitOf(address bridge) public view returns (uint256 limit) {
     Bridge storage bridgeContext = bridges[bridge];
@@ -187,9 +233,10 @@ contract CatERC20 is ERC20, Ownable, IXERC20 {
   }
 
   /**
-   * @notice Returns the current limit of a bridge
-   *
-   * @return limit The limit the bridge has
+   * @notice Returns the current burn limit of a bridge.
+   * @dev We have no defined burn limit and anyone is able to burn someone else's tokens
+   * if they have allowance.
+   * @return limit The limit the bridge has.
    */
   function burningCurrentLimitOf(address /* bridge */) public pure returns (uint256 limit) {
     return limit = type(uint256).max;
@@ -198,9 +245,10 @@ contract CatERC20 is ERC20, Ownable, IXERC20 {
   //--- Change Bridge Limits ---//
 
   /**
-   * @notice Uses the limit of any bridge
-   * @param bridge The address of the bridge who is being changed
-   * @param deltaLimit The change in the limit
+   * @notice Spends from limits of a bridge.
+   * @dev Subtracts when minted (deltaLimit > 0), adds when burned (deltaLimit < 0).
+   * @param bridge The address of the bridge to change limits for.
+   * @param deltaLimit The change in the limit.
    */
   function _useBridgeLimits(address bridge, int256 deltaLimit) internal {
     Bridge storage bridgeContext = bridges[bridge];
@@ -220,9 +268,9 @@ contract CatERC20 is ERC20, Ownable, IXERC20 {
   }
 
   /**
-   * @notice Updates the limit of any bridge
-   * @param bridge The address of the bridge we are setting the limit too
-   * @param newMaxLimit The updated limit we are setting to the bridge
+   * @notice Updates the limit of any bridge.
+   * @param bridge The address of the bridge we are setting the limit too.
+   * @param newMaxLimit The updated limit we are setting to the bridge.
    */
   function _changeLimit(address bridge, uint256 newMaxLimit) internal {
     Bridge storage bridgeContext = bridges[bridge];
@@ -230,7 +278,7 @@ contract CatERC20 is ERC20, Ownable, IXERC20 {
     uint256 currentTime = block.timestamp;
 
     uint256 newCurrentLimit = _calcNewCurrentLimit(
-      bridgeContext.maxLimit, // Use the old limit to compute the delta correctly.
+      bridgeContext.maxLimit,
       bridgeContext.currentLimit,
       bridgeContext.lastTouched,
       currentTime,
@@ -253,12 +301,12 @@ contract CatERC20 is ERC20, Ownable, IXERC20 {
    * currentTime <= reasonable timestamp <= type(uint48).max.
    *  type(int256).min <= deltaLimit <= type(int256).max.
    * 
-   * @param maxLimit The maximum for the bridge
-   * @param currentLimit The current used of the limit
+   * @param maxLimit The maximum for the bridge.
+   * @param currentLimit The current used limit.
    * @param lastTouched When the last change to the limit was made
    * @param currentTime The current time. Please provide block.timestamp.
    * @param deltaLimit The delta that has to be applied to the limit.
-   * @return newCurrentLimit The new current limit
+   * @return newCurrentLimit The new current limit.
    */
   function _calcNewCurrentLimit(
     uint256 maxLimit,
@@ -282,7 +330,7 @@ contract CatERC20 is ERC20, Ownable, IXERC20 {
     // if deltaTime > DURATION: Then the new limit is deltaLimit since we know deltaLimit < maxLimit.
     if (deltaTime >= DURATION) return deltaLimit > 0 ? uint256(deltaLimit) : 0;
     
-    // Lets compute the decay.
+    // Let us compute the decay.
     uint256 decay = maxLimit * deltaTime / DURATION;
     
     newCurrentLimit = currentLimit > decay ? currentLimit - decay : 0;

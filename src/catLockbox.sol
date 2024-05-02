@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >=0.8.4 <0.9.0;
+pragma solidity ^0.8.22;
 
 import { IXERC20 } from './interfaces/IXERC20.sol';
 import { IXERC20Lockbox } from './interfaces/IXERC20Lockbox.sol';
