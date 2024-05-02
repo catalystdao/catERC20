@@ -5,9 +5,9 @@ import { Test } from "forge-std/Test.sol";
 
 import { MockERC20 } from "../mocks/MockERC20.sol";
 
-import { CatERC20 } from "../../src/catERC20.sol";
-import { CatLockbox } from "../../src/catLockbox.sol";
-import { CatERC20Factory } from "../../src/catERC20Factory.sol";
+import { CatERC20 } from "../../src/CatERC20.sol";
+import { CatLockbox } from "../../src/CatLockbox.sol";
+import { CatERC20Factory } from "../../src/CatERC20Factory.sol";
 
 contract CatERC20FactoryTest is Test {
     CatERC20Factory CATERC20FACTORY;
@@ -18,9 +18,9 @@ contract CatERC20FactoryTest is Test {
 
     //--- Deploy XERC20 Token ---/
 
-     function test_deploy_simple_token_with_owner(string calldata name, string calldata symbol, address owner) external {
+     function test_deploy_simple_token_with_owner(string calldata name, string calldata symbol, address owner, bytes12 salt) external {
         vm.assume(owner != address(0));
-        address deployedToken = CATERC20FACTORY.deployXERC20(name, symbol, owner);
+        address deployedToken = CATERC20FACTORY.deployXERC20(name, symbol, owner, salt);
 
         // Checks:
         // 1. Owner is set to address we provided.
@@ -32,6 +32,22 @@ contract CatERC20FactoryTest is Test {
 
         // 3. Check that it has 0 totalSupply.
         assertEq(CatERC20(deployedToken).totalSupply(), 0, "Not valid initial token");
+    }
+
+    /** @notice Checks that we can't deploy the same salt twice (with same owner). */
+    function test_salt_determines_address(string calldata name, string calldata symbol, address owner, bytes12 salt) external {
+        vm.assume(owner != address(0));
+        vm.assume(owner != address(type(uint160).max));
+        CATERC20FACTORY.deployXERC20(name, symbol, owner, salt);
+
+        vm.expectRevert();
+        CATERC20FACTORY.deployXERC20(name, symbol, owner, salt);
+
+        unchecked {
+            CATERC20FACTORY.deployXERC20(name, symbol, owner, bytes12(uint96(salt) + 1));
+            CATERC20FACTORY.deployXERC20(name, symbol, address(uint160(owner) + 1), salt);
+        }
+
     }
 
     function test_deploy_simple_token(string calldata name, string calldata symbol) external {

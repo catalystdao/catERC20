@@ -5,8 +5,8 @@ import { Test } from "forge-std/Test.sol";
 
 import { MockERC20 } from "../mocks/MockERC20.sol";
 
-import { CatERC20 } from "../../src/catERC20.sol";
-import { CatLockbox } from "../../src/catLockbox.sol";
+import { CatERC20 } from "../../src/CatERC20.sol";
+import { CatLockbox } from "../../src/CatLockbox.sol";
 
 contract CatLockboxTest is Test {
 

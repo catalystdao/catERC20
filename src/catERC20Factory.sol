@@ -3,8 +3,8 @@ pragma solidity ^0.8.22;
 
 import { IXERC20Factory } from './interfaces/IXERC20Factory.sol';
 
-import { CatERC20 } from './catERC20.sol';
-import { CatLockbox } from './catLockbox.sol';
+import { CatERC20 } from './CatERC20.sol';
+import { CatLockbox } from './CatLockbox.sol';
 
 /**
  * @notice CatERC20 Factory. Helps with deploying CatERC20 to the same address across-chains.
@@ -26,9 +26,10 @@ contract CatERC20Factory is IXERC20Factory {
   function deployXERC20(
     string calldata name,
     string calldata symbol,
-    address owner
+    address owner,
+    bytes12 salt
   ) external returns (address caterc20) {
-    caterc20 = _deployXERC20(name, symbol, owner);
+    caterc20 = _deployXERC20(name, symbol, owner, salt);
 
     CatERC20(caterc20).transferOwnership(owner);
 
@@ -51,7 +52,7 @@ contract CatERC20Factory is IXERC20Factory {
     address[] calldata bridges
   ) external returns (address caterc20) {
 
-    caterc20 = _deployXERC20(name, symbol, msg.sender);
+    caterc20 = _deployXERC20(name, symbol, msg.sender, bytes12(0));
 
     _setBridgeLimits(caterc20, minterLimits, bridges);
 
@@ -94,7 +95,7 @@ contract CatERC20Factory is IXERC20Factory {
     if ((baseToken == address(0) && !isNative) || (isNative && baseToken != address(0))) {
       revert IXERC20Factory_BadTokenAddress();
     }
-    caterc20 = _deployXERC20(name, symbol, msg.sender);
+    caterc20 = _deployXERC20(name, symbol, msg.sender, bytes12(0));
 
     _setBridgeLimits(caterc20, minterLimits, bridges);
 
@@ -121,11 +122,14 @@ contract CatERC20Factory is IXERC20Factory {
   function _deployXERC20(
     string calldata name,
     string calldata symbol,
-    address owner
+    address owner,
+    bytes12 salt
   ) internal returns (address caterc20) {
-    bytes32 salt = keccak256(abi.encodePacked(name, symbol, owner));
+    // concat owner and salt. Owner is in first 20 bytes of the salt
+    // where salt is in the last 12.
+    bytes32 fullySalt = bytes32(uint256(bytes32(bytes20(owner))) + uint256(uint96(salt)));
 
-    caterc20 = address(new CatERC20{salt: salt}(name, symbol, address(this)));
+    caterc20 = address(new CatERC20{salt: fullySalt}(name, symbol, address(this)));
   }
 
   /**
