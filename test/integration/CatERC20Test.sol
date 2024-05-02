@@ -12,7 +12,7 @@ contract CatERC20Test is Test {
     CatERC20 CATERC20;
 
     function setUp() public {
-        CATERC20 = new CatERC20(NAME, SYMBOL);
+        CATERC20 = new CatERC20(NAME, SYMBOL, address(this));
     }
 
     //--- Lockbox Interactions ---//

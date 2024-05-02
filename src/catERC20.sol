@@ -43,10 +43,10 @@ contract CatERC20 is ERC20, Ownable, IXERC20 {
    */
   mapping(address bridgeAddress => Bridge bridgeContext) public bridges;
 
-  constructor(string memory name_, string memory symbol_) {
+  constructor(string memory name_, string memory symbol_, address owner) {
       NAME = name_;
       SYMBOL = symbol_;
-      _initializeOwner(msg.sender);
+      _initializeOwner(owner);
 
       CONSTANT_NAME_HASH = keccak256(bytes(name_));
   }

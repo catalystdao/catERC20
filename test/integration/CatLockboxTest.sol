@@ -18,7 +18,7 @@ contract CatLockboxTest is Test {
 
     function setUp() external {
         ERC20 = new MockERC20(NAME, SYMBOL, 0);
-        CATERC20 = new CatERC20(NAME, SYMBOL);
+        CATERC20 = new CatERC20(NAME, SYMBOL, address(this));
     }
 
     function _getERC20Lockbox(address xerc20, address erc20) internal returns(CatLockbox catbox) {

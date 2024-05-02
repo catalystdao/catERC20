@@ -98,7 +98,7 @@ contract CatERC20Factory is IXERC20Factory {
     }
     bytes32 salt = keccak256(abi.encodePacked(name, symbol, msg.sender));
 
-    caterc20 = address(new CatERC20{salt: salt}(name, symbol));
+    caterc20 = address(new CatERC20{salt: salt}(name, symbol, address(this)));
 
     for (uint256 i; i < _bridgesLength; ++i) {
       CatERC20(caterc20).setLimits(bridges[i], minterLimits[i], 0);

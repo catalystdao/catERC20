@@ -8,7 +8,7 @@ import { CatERC20, Bridge } from "../../../src/catERC20.sol";
 contract CatERC20getCurrentLimit is CatERC20 {
     function test() external {}
 
-    constructor(string memory name, string memory symbol) CatERC20(name, symbol) {}
+    constructor(string memory name, string memory symbol, address owner) CatERC20(name, symbol, owner) {}
 
     function getCurrentLimit(
         uint256 maxLimit,
@@ -32,7 +32,7 @@ contract CatERC20CurrentLimitOfTest is Test {
     CatERC20getCurrentLimit GCL;
 
     function setUp() external {
-        GCL = new CatERC20getCurrentLimit("", "");
+        GCL = new CatERC20getCurrentLimit("", "", address(this));
     }
 
     function test_compare_mintingCurrentLimitOf(address bridge, Bridge calldata bridgeContext) external {
