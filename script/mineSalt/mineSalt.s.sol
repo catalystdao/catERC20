@@ -63,6 +63,7 @@ contract MineSalt is Script {
 
     function factory(string memory prefix) public {
         bytes32 initCodeHash = keccak256(abi.encodePacked(type(CatERC20Factory).creationCode));
+        console2.logBytes32(initCodeHash);
         (bytes32 salt, ) = mineSalt(initCodeHash, prefix);
 
         // DEPLOY
@@ -77,6 +78,7 @@ contract MineSalt is Script {
 
     function tokenAddress(string memory prefix, address factoryAddress, string memory name, string memory symbol, address owner) public {
         bytes32 initCodeHash = keccak256(abi.encodePacked(type(CatERC20).creationCode, abi.encode(name, symbol, factoryAddress)));
+        console2.logBytes32(initCodeHash);
         (bytes32 salt, address expectedAddress) = mineSalt(initCodeHash, prefix, factoryAddress, owner);
 
         console2.log(expectedAddress);

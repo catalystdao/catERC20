@@ -19,11 +19,11 @@ contract DeployFactoryScript is Script, StdAssertions {
         console2.logAddress(address(fact));
     }
 
-    function test(address owner, bytes12 salt) public {
+    function test(string memory name, string memory symbol, address owner, bytes12 salt) public {
         CatERC20Factory fact = deployFactory();
         vm.broadcast();
 
-        address tkn = fact.deployXERC20("Name", "Symbol", owner, salt);
+        address tkn = fact.deployXERC20(name, symbol, owner, salt);
 
         console2.logAddress(tkn);
     }
