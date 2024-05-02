@@ -100,7 +100,6 @@ contract CatERC20 is ERC20, Ownable, IXERC20 {
   }
 
   bytes32 immutable CONSTANT_NAME_HASH;
-
   
   /** 
    * @dev For more performance, override to return the constant value

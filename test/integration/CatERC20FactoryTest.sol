@@ -18,11 +18,26 @@ contract CatERC20FactoryTest is Test {
 
     //--- Deploy XERC20 Token ---/
 
+     function test_deploy_simple_token_with_owner(string calldata name, string calldata symbol, address owner) external {
+        vm.assume(owner != address(0));
+        address deployedToken = CATERC20FACTORY.deployXERC20(name, symbol, owner);
+
+        // Checks:
+        // 1. Owner is set to address we provided.
+        assertEq(CatERC20(deployedToken).owner(), owner, "Owner not correctly set");
+
+        // 2. Name and symbol
+        assertEq(CatERC20(deployedToken).name(), name, "Name not set correctly");
+        assertEq(CatERC20(deployedToken).symbol(), symbol, "Symbol not set correctly");
+
+        // 3. Check that it has 0 totalSupply.
+        assertEq(CatERC20(deployedToken).totalSupply(), 0, "Not valid initial token");
+    }
+
     function test_deploy_simple_token(string calldata name, string calldata symbol) external {
         uint256[] memory minterLimits = new uint256[](0);
-        uint256[] memory burnerLimits = new uint256[](0);
         address[] memory bridges = new address[](0);
-        address deployedToken = CATERC20FACTORY.deployXERC20(name, symbol, minterLimits, burnerLimits, bridges);
+        address deployedToken = CATERC20FACTORY.deployXERC20(name, symbol, minterLimits, bridges);
 
         // Checks:
         // 1. Owner is set to us. (address(this)).
@@ -39,16 +54,15 @@ contract CatERC20FactoryTest is Test {
     /** @dev Tokens are deployed with create2, with salt as sender, name and symbol. As a result, you can't do deployments of same parameters twice. */
     function test_revert_deploy_twice_same_parameters(string calldata name, string calldata symbol) external {
         uint256[] memory minterLimits = new uint256[](0);
-        uint256[] memory burnerLimits = new uint256[](0);
         address[] memory bridges = new address[](0);
-        CATERC20FACTORY.deployXERC20(name, symbol, minterLimits, burnerLimits, bridges);
+        CATERC20FACTORY.deployXERC20(name, symbol, minterLimits, bridges);
 
         vm.expectRevert();
-        CATERC20FACTORY.deployXERC20(name, symbol, minterLimits, burnerLimits, bridges);
+        CATERC20FACTORY.deployXERC20(name, symbol, minterLimits, bridges);
 
         // If we use another sender, then we get another address.
         vm.prank(address(200));
-        CATERC20FACTORY.deployXERC20(name, symbol, minterLimits, burnerLimits, bridges);
+        CATERC20FACTORY.deployXERC20(name, symbol, minterLimits, bridges);
     }
 
     /** Also contains a revert test.  */
@@ -64,22 +78,21 @@ contract CatERC20FactoryTest is Test {
         for (uint256 i = 0; i < minterLimits_.length; ++i) {
             minterLimits[i] = minterLimits_[i];
         }
-        uint256[] memory burnerLimits = minterLimits;
 
         if (minterLimits.length != bridges.length) {
             vm.expectRevert(abi.encodeWithSignature("IXERC20Factory_InvalidLength()"));
-            CATERC20FACTORY.deployXERC20(name, symbol, minterLimits, burnerLimits, bridges);
+            CATERC20FACTORY.deployXERC20(name, symbol, minterLimits, bridges);
             return;
         }
         uint256 snapshotId = vm.snapshot();
-        address deploymentAddress = CATERC20FACTORY.deployXERC20(name, symbol, minterLimits, burnerLimits, bridges);
+        address deploymentAddress = CATERC20FACTORY.deployXERC20(name, symbol, minterLimits, bridges);
 
         vm.revertTo(snapshotId);
 
         for (uint256 i = 0; i < minterLimits_.length; ++i) {
             vm.expectCall(deploymentAddress, abi.encodeWithSignature("setLimits(address,uint256,uint256)", bridges[i], minterLimits[i], 0));
         }
-        CATERC20FACTORY.deployXERC20(name, symbol, minterLimits, burnerLimits, bridges);
+        CATERC20FACTORY.deployXERC20(name, symbol, minterLimits, bridges);
     }
 
     //TODO: Check events.
