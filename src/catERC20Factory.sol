@@ -10,7 +10,7 @@ import { CatLockbox } from './CatLockbox.sol';
  * @notice CatERC20 Factory. Helps with deploying CatERC20 to the same address across-chains.
  * @dev This contract has differences to CatERC20 including:
  * 1. Usage of CREATE2 instead of CREATE3. This makes CatERC20 cheaper to use but more expensive to deploy.
- * 2. No burn limits, CatERC20 tokens do not have burn limits and as a result the burn arguments are not needed.
+ * 2. No burn limits, CatERC20 tokens do not have burn limits and as a result, the burn arguments are not needed.
  * 3. Ability to deploy a token on behalf of another account.
  */
 contract CatERC20Factory is IXERC20Factory {
@@ -116,7 +116,7 @@ contract CatERC20Factory is IXERC20Factory {
    * @param name The name of the token.
    * @param symbol The symbol of the token.
    * @param owner The owner of the address, used in the salt. It is expected.
-   * that ownership is transfered to this address.
+   * that ownership is transferred to this address.
    * @return caterc20 The address of the xerc20.
    */
   function _deployXERC20(
