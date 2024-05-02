@@ -6,12 +6,12 @@ import { IXERC20Lockbox } from './interfaces/IXERC20Lockbox.sol';
 
 import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
 
+/**
+ * @notice XERC20 compatible lockbox.
+ */
 contract CatLockbox is IXERC20Lockbox {
 
   error BadTokenAddress();
-  error NotNative();
-  error IsNative();
-  error WithdrawFailed();
 
   /**
    * @notice The XERC20 token of this contract
@@ -49,7 +49,7 @@ contract CatLockbox is IXERC20Lockbox {
    */
 
   function depositNative() public payable {
-    if (!IS_NATIVE) revert NotNative();
+    if (!IS_NATIVE) revert IXERC20Lockbox_NotNative();
 
     _deposit(msg.sender, msg.value);
   }
@@ -60,7 +60,7 @@ contract CatLockbox is IXERC20Lockbox {
    * @param amount The amount of tokens to deposit
    */
   function deposit(uint256 amount) external {
-    if (IS_NATIVE) revert IsNative();
+    if (IS_NATIVE) revert IXERC20Lockbox_Native();
 
     _deposit(msg.sender, amount);
   }
@@ -73,7 +73,7 @@ contract CatLockbox is IXERC20Lockbox {
    */
 
   function depositTo(address to, uint256 amount) external {
-    if (IS_NATIVE) revert IsNative();
+    if (IS_NATIVE) revert IXERC20Lockbox_Native();
 
     _deposit(to, amount);
   }
@@ -84,7 +84,7 @@ contract CatLockbox is IXERC20Lockbox {
    * @param to The user to send the CatERC20 to
    */
   function depositNativeTo(address to) public payable {
-    if (!IS_NATIVE) revert NotNative();
+    if (!IS_NATIVE) revert IXERC20Lockbox_NotNative();
 
     _deposit(to, msg.value);
   }

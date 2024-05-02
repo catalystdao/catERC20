@@ -95,7 +95,7 @@ contract CatLockboxTest is Test {
         vm.deal(caller, amount);
 
         vm.prank(caller);
-        vm.expectRevert(abi.encodeWithSignature("NotNative()"));
+        vm.expectRevert(abi.encodeWithSignature("IXERC20Lockbox_NotNative()"));
         lockbox.depositNative{value: amount}();
     }
 
@@ -107,7 +107,7 @@ contract CatLockboxTest is Test {
         vm.deal(caller, amount);
 
         vm.prank(caller);
-        vm.expectRevert(abi.encodeWithSignature("NotNative()"));
+        vm.expectRevert(abi.encodeWithSignature("IXERC20Lockbox_NotNative()"));
         lockbox.depositNativeTo{value: amount}(to);
     }
 
@@ -197,7 +197,7 @@ contract CatLockboxTest is Test {
         ERC20.approve(address(lockbox), amount);
 
         vm.prank(caller);
-        vm.expectRevert(abi.encodeWithSignature("IsNative()"));
+        vm.expectRevert(abi.encodeWithSignature("IXERC20Lockbox_Native()"));
         lockbox.deposit(amount);
     }
 
@@ -210,7 +210,7 @@ contract CatLockboxTest is Test {
         ERC20.approve(address(lockbox), amount);
 
         vm.prank(caller);
-        vm.expectRevert(abi.encodeWithSignature("IsNative()"));
+        vm.expectRevert(abi.encodeWithSignature("IXERC20Lockbox_Native()"));
         lockbox.depositTo(to, amount);
     }
 
