@@ -11,7 +11,8 @@ import { SafeTransferLib } from "solady/utils/SafeTransferLib.sol";
  */
 contract CatLockbox is IXERC20Lockbox {
 
-  error BadTokenAddress();
+  error BaseTokenNotContract(); // 0x3577a588
+  error BadTokenAddress(); // 0xa3eecea2
 
   /**
    * @notice The XERC20 token of this contract
@@ -30,15 +31,22 @@ contract CatLockbox is IXERC20Lockbox {
 
   /**
    * @notice Constructor
+   * @dev To use the lockbox properly, the lockbox has to be added to the XERC20 token.
    *
    * @param xerc20 The address of the CatERC20 contract
-   * @param baseToken The address of the ERC20 contract
+   * @param baseToken The address of the ERC20 contract.
+   *  If isNative is false, then baseToken has to be a contract.
    * @param isNative Whether the ERC20 token is the native gas token of this chain or not
    */
   constructor(address xerc20, address baseToken, bool isNative) {
     if ((baseToken == address(0) && !isNative) || (isNative && baseToken != address(0))) {
       revert BadTokenAddress();
     }
+    // We use Solady safeTransfer library. The safeTransferFrom library does not check
+    // if baseToken has code before calling. As a result, if this lockbox is added as
+    // a lockbox for an xERC20 token deposit will pass (not collect tokens) for any value.
+    if (!isNative) if (baseToken.code.length == 0) revert BaseTokenNotContract();
+    
     XERC20 = IXERC20(xerc20);
     ERC20 = baseToken;
     IS_NATIVE = isNative;

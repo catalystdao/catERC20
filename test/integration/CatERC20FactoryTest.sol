@@ -2,6 +2,9 @@
 pragma solidity ^0.8.13;
 
 import { Test } from "forge-std/Test.sol";
+
+import { MockERC20 } from "../mocks/MockERC20.sol";
+
 import { CatERC20 } from "../../src/catERC20.sol";
 import { CatLockbox } from "../../src/catLockbox.sol";
 import { CatERC20Factory } from "../../src/catERC20Factory.sol";
@@ -83,7 +86,10 @@ contract CatERC20FactoryTest is Test {
 
     //--- Deploy Lockbox ---//
 
-    function test_deploy_lockbox(address caterc20, address baseToken) external {
+    function test_deploy_lockbox(address caterc20, bytes32 tokenSalt) external {
+        MockERC20 ERC20 = new MockERC20{salt: tokenSalt}("hello", "hello", 0);
+        address baseToken = address(ERC20);
+
         bool isNative = baseToken == address(0);
         address payable lockbox = CATERC20FACTORY.deployLockbox(caterc20, baseToken, isNative);
 
@@ -97,7 +103,10 @@ contract CatERC20FactoryTest is Test {
 
     // TODO: Check events.
     /** @dev Tokens are deployed with create2, with salt as caterc20 and baseToken. As a result, you can't do deployments of same parameters twice. */
-    function test_revert_deploy_twice_same_parameters(address caterc20, address baseToken) external {
+    function test_revert_deploy_twice_same_parameters(address caterc20, bytes32 tokenSalt) external {
+        MockERC20 ERC20 = new MockERC20{salt: tokenSalt}("hello", "hello", 0);
+        address baseToken = address(ERC20);
+
         bool isNative = baseToken == address(0);
         CATERC20FACTORY.deployLockbox(caterc20, baseToken, isNative);
 
@@ -110,7 +119,13 @@ contract CatERC20FactoryTest is Test {
         CATERC20FACTORY.deployLockbox(caterc20, baseToken, isNative);
     }
 
-    function test_revert_compare_base_token_and_is_native(address caterc20, address baseToken, bool isNative) external {
+    function test_revert_compare_base_token_and_is_native(address caterc20, bytes32 tokenSalt, bool isNative) external {
+        address baseToken;
+        if (tokenSalt != bytes32(0)) {
+            MockERC20 ERC20 = new MockERC20{salt: tokenSalt}("hello", "hello", 0);
+            baseToken = address(ERC20);
+        }
+
         if (isNative && baseToken == address(0)) {
             // Works
         } else if (!isNative && baseToken != address(0)) {
@@ -123,7 +138,10 @@ contract CatERC20FactoryTest is Test {
 
     //--- Deploy CatERC20 & Lockbox ---//
 
-    function test_deploy_token_and_lockbox(string calldata name, string calldata symbol, address baseToken) external {
+    function test_deploy_token_and_lockbox(string calldata name, string calldata symbol, bytes32 tokenSalt) external {
+        MockERC20 ERC20 = new MockERC20{salt: tokenSalt}("hello", "hello", 0);
+        address baseToken = address(ERC20);
+
         uint256[] memory minterLimits = new uint256[](0);
         address[] memory bridges = new address[](0);
         bool isNative = baseToken == address(0);
@@ -148,7 +166,10 @@ contract CatERC20FactoryTest is Test {
         assertEq(address(CatLockbox(lockbox).ERC20()), baseToken, "erc20 not correctly set");
     }
 
-    function test_revert_compare_base_token_and_is_native(string calldata name, string calldata symbol, address baseToken, bool isNative) external {
+    function test_revert_compare_base_token_and_is_native(string calldata name, string calldata symbol, bytes32 tokenSalt, bool isNative) external {
+        MockERC20 ERC20 = new MockERC20{salt: tokenSalt}("hello", "hello", 0);
+        address baseToken = address(ERC20);
+
         uint256[] memory minterLimits = new uint256[](0);
         address[] memory bridges = new address[](0);
 

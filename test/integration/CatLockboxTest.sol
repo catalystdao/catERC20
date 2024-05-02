@@ -31,6 +31,20 @@ contract CatLockboxTest is Test {
         CATERC20.setLockbox(address(catbox));
     }
 
+    //--- Init Tests ---//
+
+    function test_basetoken_codesize(address xerc20, address baseToken, bytes calldata code) external {
+        // We can't etch pre-compiles.
+        vm.assume(uint160(baseToken) > 64);
+        
+        vm.etch(baseToken, code);
+
+        if (code.length == 0) {
+            vm.expectRevert(abi.encodeWithSignature("BaseTokenNotContract()"));
+        }
+        new CatLockbox(xerc20, baseToken, false);
+    }
+
     //--- ERC20 Lockbox Deposit ---//
 
     function test_deposit(uint248 amount, address caller) external {
